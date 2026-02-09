@@ -1,0 +1,3 @@
+"""Enkrypt AI Skill Scanner — multi-agent security analysis for Agent Skill packages."""
+
+__version__ = "0.1.0"
