@@ -1,6 +1,6 @@
 # Enkrypt AI Skill Sentinel
 
-A security scanner for Agent Skill packages. It uses multi-agent analysis to detect prompt injection, data exfiltration, command injection, and other threats in skill packages.
+A security scanner for Agent Skill packages. It uses multi-agent analysis to detect prompt injection, data exfiltration, command injection, malware, and other threats in skill packages.
 
 ## Installation
 
@@ -34,8 +34,18 @@ pip install -e .
 # 1. Export your OpenAI API key
 export OPENAI_API_KEY="sk-..."
 
-# 2. Scan a skill directory
+# 2. (Optional) Export your VirusTotal API key for binary malware scanning
+export VIRUSTOTAL_API_KEY="your-vt-api-key"
+
+# 3. Scan a skill directory
 skill-sentinel scan /path/to/skill/directory
+```
+
+Alternatively, create a `.env` file in the project root instead of exporting variables:
+
+```bash
+cp .env.example .env
+# Edit .env with your keys
 ```
 
 ## Usage
@@ -120,9 +130,18 @@ print(report["overall_risk_assessment"]["skill_verdict"])
 The scanner performs a multi-step security analysis:
 
 1. **File Discovery** — lists all files in the skill directory (static, no LLM).
-2. **SKILL.md Analysis** — an agent reads the SKILL.md manifest and instructions, looking for prompt injection, trust abuse, discovery abuse, and other threats.
-3. **File Verification** *(conditional)* — if the skill contains scripts or referenced files beyond SKILL.md, a second agent reads each file and checks alignment with SKILL.md claims, searching for command injection, data exfiltration, hardcoded secrets, obfuscation, etc.
-4. **Report Synthesis** — a final agent filters false positives, prioritizes findings, and produces a structured JSON report.
+2. **VirusTotal Binary Scan** *(optional)* — if binary files (executables, archives, images, PDFs, etc.) are found and a `VIRUSTOTAL_API_KEY` is set, each binary is checked against VirusTotal's malware database via SHA-256 hash lookup. Results are passed to the report synthesizer.
+3. **SKILL.md Analysis** — an agent reads the SKILL.md manifest and instructions, looking for prompt injection, trust abuse, discovery abuse, and other threats.
+4. **File Verification** *(conditional)* — if the skill contains scripts or referenced files beyond SKILL.md, a second agent reads each file and checks alignment with SKILL.md claims, searching for command injection, data exfiltration, hardcoded secrets, obfuscation, etc.
+5. **Report Synthesis** — a final agent combines all findings (including VirusTotal results), filters false positives, prioritizes findings, and produces a structured JSON report.
+
+### Malware Scanning (VirusTotal)
+
+If a `VIRUSTOTAL_API_KEY` environment variable is set, Skill Sentinel automatically scans binary files found in skill packages against VirusTotal's malware database. This runs **before** the agent pipeline — no LLM calls are needed.
+
+**Supported binary types:** executables (`.exe`, `.dll`, `.so`, `.dylib`, `.bin`), archives (`.zip`, `.tar`, `.gz`, `.7z`, `.rar`), documents (`.pdf`, `.doc`, `.xls`), images (`.png`, `.jpg`, `.gif`), JVM/WASM (`.jar`, `.war`, `.wasm`, `.class`), and more.
+
+**Getting a free API key:** Sign up at [virustotal.com](https://www.virustotal.com/) — the free tier allows 500 lookups/day, which is more than enough for skill scanning.
 
 ## Output
 
@@ -134,6 +153,7 @@ The scanner writes a JSON report containing:
 - `priority_order` — ranked list of finding IDs
 - `correlations` — related findings grouped together
 - `recommendations` — actionable next steps
+- `references` — VirusTotal scan links and other reference URLs
 - `overall_risk_assessment` — risk level, verdict (SAFE / SUSPICIOUS / MALICIOUS), reasoning
 - `token_usage` — LLM token usage metrics for the scan
 
@@ -156,7 +176,8 @@ skill_scanner_package/
     │   └── report_schema.json      # Output JSON schema
     └── tools/
         ├── custom_tool.py      # ReadFile & Grep tools
-        └── file_discovery.py   # Static file listing
+        ├── file_discovery.py   # Static file listing
+        └── virustotal_tool.py  # VirusTotal binary malware scanning
 ```
 
 ## Environment Variables
@@ -165,3 +186,4 @@ skill_scanner_package/
 |---|---|---|
 | `OPENAI_API_KEY` | Your OpenAI API key (required) | — |
 | `OPENAI_MODEL_NAME` | Model to use for analysis | `gpt-4.1` |
+| `VIRUSTOTAL_API_KEY` | VirusTotal API key for binary malware scanning (optional) | — |

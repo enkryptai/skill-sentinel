@@ -154,38 +154,74 @@ report_synthesis_task:
     {threat_categories}
 
 
+    VIRUSTOTAL BINARY FILE SCAN RESULTS:
+
+    {virustotal_results}
+
+
     INSTRUCTIONS:
 
     1. Review ALL findings from the previous task(s).
 
-    2. FILTER FALSE POSITIVES aggressively:
+    2. Review the VIRUSTOTAL BINARY FILE SCAN RESULTS above. These are automated
+       malware scan results for any binary files found in the skill package
+       (images, PDFs, executables, archives, etc.). For each result:
+       - If "malicious" > 0: add a validated finding with category "malware",
+         severity CRITICAL (or HIGH if detection ratio < 10%), and include the
+         SHA256, detection counts, and VirusTotal permalink as evidence.
+         Add the VirusTotal permalink to the top-level "references" array.
+         This is the ONLY case where a binary should be marked CRITICAL.
+       - If severity is "NOT_SCANNED" (found_in_vt = false, error occurred,
+         hash not in VT database, or no VIRUSTOTAL_API_KEY was set): the file
+         could NOT be verified. Treat it as SUSPICIOUS with severity MEDIUM.
+         Add a validated finding with category "malware", severity MEDIUM,
+         and explain that the binary file could not be scanned or verified
+         as safe (include the error message if one is present). If a
+         permalink is available, add it to the top-level "references" array.
+       - If "severity" is "CLEAN" (found_in_vt = true, malicious = 0,
+         suspicious = 0): this file is CONFIRMED SAFE by VirusTotal. You MUST
+         NOT add it as a threat or validated finding. Instead, note in the
+         overall_risk_assessment summary or verdict_reasoning that the
+         VirusTotal scan showed zero detections for this file and it can be
+         considered safe. Do NOT override this with your own judgment — if
+         VirusTotal says clean, treat it as clean. Still add the VirusTotal
+         permalink to the top-level "references" array so users can verify.
+       IMPORTANT: The top-level "references" array is REQUIRED and must always
+       be present. Collect ALL VirusTotal permalinks (from clean, malicious,
+       and unverified files alike) into this array. If no VT links exist,
+       output an empty array: "references": [].
+
+    3. FILTER FALSE POSITIVES aggressively:
        - Pattern matches without malicious context -> remove
        - Internal skill file reads -> normal, not a threat
        - Standard library for documented purposes -> safe
        - Keywords in comments/documentation -> not a threat
        - When in doubt and no exfiltration -> probably safe
 
-    3. PRIORITIZE remaining findings by real-world exploitability:
+    4. PRIORITIZE remaining findings by real-world exploitability:
+       - Malware confirmed by VirusTotal (malicious > 0) = CRITICAL
        - Credential theft + exfiltration = CRITICAL
        - Prompt injection with concealment = HIGH
        - Command injection via eval/exec = HIGH
        - Hardcoded secrets = HIGH
+       - Unverified binary files (scan failed / no VT key / not in VT) = MEDIUM
        - Description mismatch without clear harm = MEDIUM
        - Missing optional metadata = LOW
 
-    4. CONSOLIDATE related findings into single actionable items using the
+    5. CONSOLIDATE related findings into single actionable items using the
        correlations field.
 
-    5. Produce the final JSON report. Every field in the schema is REQUIRED.
+    6. Produce the final JSON report. Every field in the schema is REQUIRED.
        Use the exact category enum values from the threat categories reference.
 
-    6. RESPOND WITH ONLY VALID JSON. No markdown wrapping, no commentary
+    7. RESPOND WITH ONLY VALID JSON. No markdown wrapping, no commentary
        outside the JSON object.
 
   expected_output: >
     A single JSON object conforming exactly to the report schema. Must include
     all required top-level fields: validated_findings, false_positives,
-    priority_order, correlations, recommendations, and overall_risk_assessment.
+    priority_order, correlations, recommendations, references, and
+    overall_risk_assessment.
     The overall_risk_assessment must include risk_level, summary, top_priority,
     skill_verdict (SAFE|SUSPICIOUS|MALICIOUS), and verdict_reasoning.
   agent: report_synthesizer_agent

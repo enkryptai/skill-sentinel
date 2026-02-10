@@ -16,6 +16,7 @@ warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
 from skill_sentinel.crew import SkillScanner
 from skill_sentinel.tools.file_discovery import discover_skill_files
+from skill_sentinel.tools.virustotal_tool import scan_binary_files
 
 # The bundled data directory lives next to this file at install time.
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -100,12 +101,27 @@ def scan(
         file_info["script_files"] or file_info["markdown_files"]
     )
 
+    # Run VirusTotal scans on binary files (if API key is available)
+    vt_results = scan_binary_files(file_info["file_tree"])
+    if vt_results:
+        vt_summary = json.dumps(vt_results, indent=2)
+    else:
+        binary_count = len(file_info.get("binary_files", []))
+        if binary_count > 0:
+            vt_summary = (
+                f"{binary_count} binary file(s) found but no VIRUSTOTAL_API_KEY "
+                "is set — binary files could not be scanned for malware."
+            )
+        else:
+            vt_summary = "No binary files found in the skill package."
+
     inputs = {
         "skill_directory": file_info["skill_directory"],
         "skill_md_path": file_info["skill_md_path"],
         "file_discovery_results": json.dumps(file_info, indent=2),
         "threat_categories": knowledge["threat_categories"],
         "report_schema": knowledge["report_schema"],
+        "virustotal_results": vt_summary,
     }
 
     scanner = SkillScanner()

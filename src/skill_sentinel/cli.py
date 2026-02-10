@@ -260,6 +260,7 @@ def _scan_single(
     output_path: str,
     SkillScanner,
     discover_skill_files,
+    scan_binary_files_fn=None,
 ) -> bool:
     """
     Run the scanner against a single skill directory.
@@ -291,16 +292,40 @@ def _scan_single(
         file_info["script_files"] or file_info["markdown_files"]
     )
 
-    # 4. Build crew inputs
+    # 4. Run VirusTotal scans on binary files (if API key is available)
+    binary_count = len(file_info.get("binary_files", []))
+    vt_results = []
+    if scan_binary_files_fn and binary_count > 0:
+        vt_results = scan_binary_files_fn(file_info["file_tree"])
+
+    if vt_results:
+        vt_summary = json.dumps(vt_results, indent=2)
+    elif binary_count > 0:
+        vt_key_set = bool(os.environ.get("VIRUSTOTAL_API_KEY", ""))
+        if not vt_key_set:
+            vt_summary = (
+                f"{binary_count} binary file(s) found but no VIRUSTOTAL_API_KEY "
+                "is set — binary files could not be scanned for malware."
+            )
+        else:
+            vt_summary = (
+                f"{binary_count} binary file(s) found. "
+                "VirusTotal scan returned no results."
+            )
+    else:
+        vt_summary = "No binary files found in the skill package."
+
+    # 5. Build crew inputs
     inputs = {
         "skill_directory": file_info["skill_directory"],
         "skill_md_path": file_info["skill_md_path"],
         "file_discovery_results": json.dumps(file_info, indent=2),
         "threat_categories": knowledge["threat_categories"],
         "report_schema": knowledge["report_schema"],
+        "virustotal_results": vt_summary,
     }
 
-    # 5. Print pre-scan info
+    # 6. Print pre-scan info
     model = os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
     print(f"[Skill Sentinel] Model:          {model}")
     print(f"[Skill Sentinel] Scanning:       {inputs['skill_directory']}")
@@ -309,6 +334,12 @@ def _scan_single(
         f"[Skill Sentinel] Files found:    {len(file_info['all_files'])}"
     )
     print(f"[Skill Sentinel] Script files:   {len(file_info['script_files'])}")
+    print(f"[Skill Sentinel] Binary files:   {binary_count}")
+    if vt_results:
+        malicious_count = sum(1 for r in vt_results if r.get("malicious", 0) > 0)
+        print(f"[Skill Sentinel] VT scanned:     {len(vt_results)} file(s), {malicious_count} flagged")
+    elif binary_count > 0 and not os.environ.get("VIRUSTOTAL_API_KEY", ""):
+        print("[Skill Sentinel] VT scan:        skipped (no VIRUSTOTAL_API_KEY)")
     if not has_other_files:
         print(
             "[Skill Sentinel] No script/reference files -- "
@@ -348,6 +379,7 @@ def _run_multi_scan(
     parallel: bool,
     SkillScanner,
     discover_skill_files,
+    scan_binary_files_fn=None,
 ) -> List[Tuple[dict, str, bool]]:
     """
     Scan multiple skills, sequentially or in parallel.
@@ -358,6 +390,7 @@ def _run_multi_scan(
         parallel: If True, scan up to 5 skills concurrently.
         SkillScanner: The crew class (passed to avoid import at module level).
         discover_skill_files: The file discovery function.
+        scan_binary_files_fn: Optional binary file scanning function.
 
     Returns:
         List of (skill_info, report_path, success) tuples.
@@ -387,6 +420,7 @@ def _run_multi_scan(
                 report_path,
                 SkillScanner,
                 discover_skill_files,
+                scan_binary_files_fn,
             )
             results.append((skill_info, report_path, success))
         return results
@@ -407,6 +441,7 @@ def _run_multi_scan(
                 report_path,
                 SkillScanner,
                 discover_skill_files,
+                scan_binary_files_fn,
             )
             future_to_job[future] = (skill_info, report_path)
 
@@ -505,6 +540,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     from skill_sentinel.crew import SkillScanner  # noqa: E402
     from skill_sentinel.tools.file_discovery import discover_skill_files  # noqa: E402
+    from skill_sentinel.tools.virustotal_tool import scan_binary_files  # noqa: E402
 
     # ------------------------------------------------------------------
     # Determine scan mode
@@ -526,7 +562,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
         output_path = os.path.abspath(args.output)
         success = _scan_single(
-            skill_directory, output_path, SkillScanner, discover_skill_files
+            skill_directory, output_path, SkillScanner, discover_skill_files,
+            scan_binary_files,
         )
         if not success:
             sys.exit(1)
@@ -562,7 +599,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
         t_start = time.monotonic()
         results = _run_multi_scan(
-            skills, output_dir, parallel, SkillScanner, discover_skill_files
+            skills, output_dir, parallel, SkillScanner, discover_skill_files,
+            scan_binary_files,
         )
         total_elapsed = time.monotonic() - t_start
         _print_multi_summary(results, output_dir, total_elapsed)
@@ -601,7 +639,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
         t_start = time.monotonic()
         results = _run_multi_scan(
-            skills, output_dir, parallel, SkillScanner, discover_skill_files
+            skills, output_dir, parallel, SkillScanner, discover_skill_files,
+            scan_binary_files,
         )
         total_elapsed = time.monotonic() - t_start
         _print_multi_summary(results, output_dir, total_elapsed)
@@ -618,7 +657,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
     output_path = os.path.abspath(args.output)
     success = _scan_single(
-        skill_directory, output_path, SkillScanner, discover_skill_files
+        skill_directory, output_path, SkillScanner, discover_skill_files,
+        scan_binary_files,
     )
     if not success:
         sys.exit(1)

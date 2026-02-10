@@ -354,6 +354,42 @@ for root, dirs, files in os.walk(os.path.expanduser("~")):
 
 ---
 
+## 15. MALWARE (Binary File Threats)
+
+- **Category ID:** `malware`
+- **OWASP Risk:** ASI04 Agentic Supply Chain Vulnerabilities, LLM03:2025 Supply Chain
+- **Default Severity:** CRITICAL
+- **Where to Look:** Binary files in the skill package (images, PDFs, executables, archives, etc.)
+
+**Key Indicators:**
+- Executable files (.exe, .dll, .so, .dylib, .bin, .com, .msi) — there is rarely a legitimate reason for an agent skill to ship executables
+- Archive files (.zip, .tar.gz, .7z, .rar) that could contain hidden payloads
+- Binary files flagged by VirusTotal or other malware scanners
+- Files with mismatched extensions (e.g., a .png that is actually an executable)
+- Suspiciously large binary files relative to the skill's stated purpose
+
+**VirusTotal Integration:**
+If a VirusTotal API key is configured, binary files are automatically scanned via SHA-256 hash lookup. Results include:
+- Detection counts (malicious / suspicious / total engines)
+- Severity derived from detection ratio (≥30% → CRITICAL, ≥10% → HIGH, else MEDIUM)
+- Permalink to the full VirusTotal report
+
+**Severity Mapping:**
+- **CRITICAL:** File flagged as malicious by ≥30% of AV engines, or executable files with no legitimate purpose
+- **HIGH:** File flagged by 10–30% of engines, or executables bundled without explanation
+- **MEDIUM:** File flagged by <10% of engines, or suspicious binary presence
+- **LOW:** Binary file present but confirmed clean by VirusTotal
+
+**Malicious Example:**
+A skill claiming to be a "text formatter" that includes a `helper.exe` or a `payload.dll` in its directory.
+
+**Safe Example:**
+A skill that includes a small `.png` icon for documentation purposes, confirmed clean by VirusTotal.
+
+**Note:** The mere *presence* of binary files in a skill package is suspicious and worth reporting, even without VirusTotal confirmation. Executables and archives should always be flagged unless there is a clear, documented reason for their inclusion.
+
+---
+
 ## Cross-Component Analysis Framework
 
 For every skill, perform these three consistency checks:

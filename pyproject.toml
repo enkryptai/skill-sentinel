@@ -21,6 +21,7 @@ classifiers = [
 dependencies = [
     "crewai[tools]>=1.9,<2.0",
     "python-dotenv>=1.0",
+    "httpx>=0.27",
 ]
 
 [project.scripts]

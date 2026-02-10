@@ -29,6 +29,18 @@ CODE_EXTENSIONS = {
     '.py', '.js', '.ts', '.tsx', '.jsx', '.go', '.java', '.c', '.cpp',
     '.h', '.hpp', '.cs', '.php', '.rb', '.rs', '.swift', '.kt', '.scala',
 }
+BINARY_EXTENSIONS = {
+    # Images
+    '.png', '.jpg', '.jpeg', '.gif', '.bmp', '.ico', '.svg', '.webp', '.tiff',
+    # Documents
+    '.pdf', '.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx',
+    # Archives
+    '.zip', '.tar', '.gz', '.bz2', '.7z', '.rar', '.tgz',
+    # Executables / shared libraries
+    '.exe', '.dll', '.so', '.dylib', '.bin', '.com', '.msi',
+    # JVM / WASM
+    '.wasm', '.class', '.jar', '.war',
+}
 
 
 def classify_file(filename: str) -> str:
@@ -49,6 +61,8 @@ def classify_file(filename: str) -> str:
         return 'config'
     elif ext in CODE_EXTENSIONS:
         return 'code'
+    elif ext in BINARY_EXTENSIONS:
+        return 'binary'
     else:
         return 'other'
 
@@ -68,6 +82,7 @@ def discover_skill_files(skill_directory: str) -> Dict[str, Any]:
             - script_files: List of paths to .py and .sh files
             - markdown_files: List of paths to .md files (excluding SKILL.md)
             - config_files: List of paths to config files
+            - binary_files: List of paths to binary files (images, PDFs, executables, etc.)
             - all_files: Flat list of all file paths
     """
     skill_directory = os.path.abspath(skill_directory)
@@ -80,6 +95,7 @@ def discover_skill_files(skill_directory: str) -> Dict[str, Any]:
     script_files: List[str] = []
     markdown_files: List[str] = []
     config_files: List[str] = []
+    binary_files: List[str] = []
     all_files: List[str] = []
 
     for root, dirs, files in os.walk(skill_directory):
@@ -121,6 +137,8 @@ def discover_skill_files(skill_directory: str) -> Dict[str, Any]:
                 markdown_files.append(file_path)
             elif file_type == 'config':
                 config_files.append(file_path)
+            elif file_type == 'binary':
+                binary_files.append(file_path)
 
     return {
         'skill_directory': skill_directory,
@@ -129,6 +147,7 @@ def discover_skill_files(skill_directory: str) -> Dict[str, Any]:
         'script_files': script_files,
         'markdown_files': markdown_files,
         'config_files': config_files,
+        'binary_files': binary_files,
         'all_files': all_files,
     }
 

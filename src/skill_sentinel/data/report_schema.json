@@ -9,6 +9,7 @@
     "priority_order",
     "correlations",
     "recommendations",
+    "references",
     "overall_risk_assessment"
   ],
   "properties": {
@@ -60,7 +61,8 @@
               "autonomy_abuse",
               "over_collection",
               "cross_context_bridging",
-              "dependency_risk"
+              "dependency_risk",
+              "malware"
             ]
           },
           "severity": {
@@ -241,6 +243,13 @@
             "enum": ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
           }
         }
+      }
+    },
+    "references": {
+      "type": "array",
+      "description": "List of reference URLs relevant to the scan (e.g., VirusTotal scan links for binary files). Always present; empty array if no references.",
+      "items": {
+        "type": "string"
       }
     },
     "overall_risk_assessment": {
