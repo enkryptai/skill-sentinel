@@ -3,7 +3,9 @@
 CLI entry point for enkryptai-skill-scanner.
 
 Usage:
-    enkryptai-skill-scanner scan <skill_directory> [-o report.json] [--model gpt-4.1]
+    enkryptai-skill-scanner scan [<provider>] [OPTIONS]
+    enkryptai-skill-scanner scan --skill /path/to/skill [-o report.json]
+    enkryptai-skill-scanner scan --dir /path/to/parent [-o reports_dir] [--parallel]
 """
 
 import argparse
@@ -12,8 +14,33 @@ import os
 import sys
 import time
 import warnings
+from collections import OrderedDict
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import List, Optional, Tuple
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
+
+# Provider keywords that trigger auto-discovery instead of path lookup
+_PROVIDER_KEYWORDS = {"cursor", "claude", "codex"}
+
+# Well-known skill directory locations per provider.
+# Project-level paths are relative to cwd; user-level paths use ~.
+_SKILL_SEARCH_PATHS = {
+    "cursor": [
+        os.path.join(".", ".cursor", "skills"),
+        os.path.join("~", ".cursor", "skills"),
+    ],
+    "claude": [
+        os.path.join(".", ".claude", "skills"),
+        os.path.join("~", ".claude", "skills"),
+    ],
+    "codex": [
+        os.path.join(".", ".codex", "skills"),
+        os.path.join("~", ".codex", "skills"),
+    ],
+}
+
+_DEFAULT_PARALLEL_WORKERS = 5
 
 
 # ---------------------------------------------------------------------------
@@ -35,10 +62,108 @@ def _load_knowledge() -> dict:
     }
 
 
+def _discover_skill_dirs(provider: Optional[str] = None) -> List[dict]:
+    """
+    Search well-known skill directories for skill packages containing SKILL.md.
+
+    Args:
+        provider: If set, only search that provider's paths.
+                  If None, search all providers.
+
+    Returns:
+        List of dicts: {"provider": str, "skill_name": str, "path": str}
+    """
+    if provider:
+        providers = {provider: _SKILL_SEARCH_PATHS[provider]}
+    else:
+        providers = _SKILL_SEARCH_PATHS
+
+    results = []
+    seen_paths = set()
+
+    for prov, search_paths in providers.items():
+        for base_path in search_paths:
+            expanded = os.path.abspath(os.path.expanduser(base_path))
+            if not os.path.isdir(expanded):
+                continue
+
+            try:
+                entries = sorted(os.listdir(expanded))
+            except PermissionError:
+                continue
+
+            for entry in entries:
+                skill_dir = os.path.join(expanded, entry)
+                if not os.path.isdir(skill_dir):
+                    continue
+
+                real = os.path.realpath(skill_dir)
+                if real in seen_paths:
+                    continue
+                seen_paths.add(real)
+
+                if not _has_skill_md(skill_dir):
+                    continue
+
+                results.append({
+                    "provider": prov,
+                    "skill_name": entry,
+                    "path": skill_dir,
+                })
+
+    return results
+
+
+def _discover_skills_in_dir(parent_dir: str) -> List[dict]:
+    """
+    List immediate subdirectories of *parent_dir* that contain a SKILL.md.
+
+    Returns:
+        List of dicts: {"provider": "custom", "skill_name": str, "path": str}
+    """
+    parent_dir = os.path.abspath(parent_dir)
+    if not os.path.isdir(parent_dir):
+        return []
+
+    results = []
+    try:
+        entries = sorted(os.listdir(parent_dir))
+    except PermissionError:
+        return []
+
+    for entry in entries:
+        skill_dir = os.path.join(parent_dir, entry)
+        if not os.path.isdir(skill_dir):
+            continue
+        if not _has_skill_md(skill_dir):
+            continue
+        results.append({
+            "provider": "custom",
+            "skill_name": entry,
+            "path": skill_dir,
+        })
+
+    return results
+
+
+def _has_skill_md(directory: str) -> bool:
+    """Check if a directory contains a SKILL.md (case-insensitive)."""
+    try:
+        for f in os.listdir(directory):
+            if f.upper() == "SKILL.MD":
+                return True
+    except PermissionError:
+        pass
+    return False
+
+
 def _append_metadata(
-    report_path: str, crew_instance, elapsed_seconds: float
+    report_path: str,
+    crew_instance,
+    elapsed_seconds: float,
+    skill_path: str,
 ) -> None:
-    """Read the report JSON, inject token usage and scan duration, write back."""
+    """Read the report JSON, inject skill_path, token usage, scan duration."""
     try:
         with open(report_path, "r") as f:
             raw = f.read().strip()
@@ -46,25 +171,28 @@ def _append_metadata(
         try:
             report_data = json.loads(raw)
         except json.JSONDecodeError:
-            # Attempt to recover a valid JSON prefix
             last_brace = raw.rfind("}")
             if last_brace != -1:
                 report_data = json.loads(raw[: last_brace + 1])
             else:
                 raise
 
-        report_data["token_usage"] = json.loads(
+        ordered = OrderedDict()
+        ordered["skill_path"] = skill_path
+        ordered.update(report_data)
+
+        ordered["token_usage"] = json.loads(
             crew_instance.usage_metrics.model_dump_json()
         )
 
         mins, secs = divmod(int(elapsed_seconds), 60)
-        report_data["scan_duration"] = {
+        ordered["scan_duration"] = {
             "seconds": round(elapsed_seconds, 1),
             "display": f"{mins}m {secs}s",
         }
 
         with open(report_path, "w") as f:
-            json.dump(report_data, f, indent=2)
+            json.dump(ordered, f, indent=2)
 
     except Exception as e:
         print(
@@ -110,13 +238,237 @@ def _print_summary(report_path: str, elapsed_seconds: float) -> None:
     print("=" * 60)
 
 
+def _read_verdict(report_path: str) -> str:
+    """Read the verdict from a report file, or return UNKNOWN."""
+    try:
+        with open(report_path, "r") as f:
+            report = json.load(f)
+        return report.get("overall_risk_assessment", {}).get(
+            "skill_verdict", "UNKNOWN"
+        )
+    except Exception:
+        return "UNKNOWN"
+
+
+# ---------------------------------------------------------------------------
+# Single-scan core logic
+# ---------------------------------------------------------------------------
+
+
+def _scan_single(
+    skill_directory: str,
+    output_path: str,
+    SkillScanner,
+    discover_skill_files,
+) -> bool:
+    """
+    Run the scanner against a single skill directory.
+
+    Returns True if the scan completed successfully, False otherwise.
+    """
+    skill_directory = os.path.abspath(skill_directory)
+    output_path = os.path.abspath(output_path)
+
+    # CrewAI's Task.output_file joins the path with cwd, so pass relative.
+    output_relpath = os.path.relpath(output_path)
+
+    # 1. Static file discovery
+    file_info = discover_skill_files(skill_directory)
+
+    if file_info["skill_md_path"] is None:
+        print(
+            f"[SkillScanner] Warning: No SKILL.md found in '{skill_directory}' "
+            "-- skipping.",
+            file=sys.stderr,
+        )
+        return False
+
+    # 2. Load bundled knowledge files
+    knowledge = _load_knowledge()
+
+    # 3. Determine whether file verification is needed
+    has_other_files = bool(
+        file_info["script_files"] or file_info["markdown_files"]
+    )
+
+    # 4. Build crew inputs
+    inputs = {
+        "skill_directory": file_info["skill_directory"],
+        "skill_md_path": file_info["skill_md_path"],
+        "file_discovery_results": json.dumps(file_info, indent=2),
+        "threat_categories": knowledge["threat_categories"],
+        "report_schema": knowledge["report_schema"],
+    }
+
+    # 5. Print pre-scan info
+    model = os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
+    print(f"[SkillScanner] Model:          {model}")
+    print(f"[SkillScanner] Scanning:       {inputs['skill_directory']}")
+    print(f"[SkillScanner] SKILL.md:       {inputs['skill_md_path']}")
+    print(
+        f"[SkillScanner] Files found:    {len(file_info['all_files'])}"
+    )
+    print(f"[SkillScanner] Script files:   {len(file_info['script_files'])}")
+    if not has_other_files:
+        print(
+            "[SkillScanner] No script/reference files -- "
+            "skipping file verification"
+        )
+    print(f"[SkillScanner] Output:         {output_path}")
+    print()
+
+    # 6. Build crew and run
+    scanner = SkillScanner()
+    the_crew = scanner.build_crew(
+        include_file_verification=has_other_files,
+        output_file=output_relpath,
+    )
+
+    t_start = time.monotonic()
+    the_crew.kickoff(inputs=inputs)
+    elapsed = time.monotonic() - t_start
+
+    # 7. Append metadata (skill_path, token usage, scan duration)
+    _append_metadata(output_path, the_crew, elapsed, skill_directory)
+
+    # 8. Print summary
+    _print_summary(output_path, elapsed)
+
+    return True
+
+
+# ---------------------------------------------------------------------------
+# Multi-scan orchestrator
+# ---------------------------------------------------------------------------
+
+
+def _run_multi_scan(
+    skills: List[dict],
+    output_dir: str,
+    parallel: bool,
+    SkillScanner,
+    discover_skill_files,
+) -> List[Tuple[dict, str, bool]]:
+    """
+    Scan multiple skills, sequentially or in parallel.
+
+    Args:
+        skills: List of {"provider", "skill_name", "path"} dicts.
+        output_dir: Directory to write per-skill reports.
+        parallel: If True, scan up to 5 skills concurrently.
+        SkillScanner: The crew class (passed to avoid import at module level).
+        discover_skill_files: The file discovery function.
+
+    Returns:
+        List of (skill_info, report_path, success) tuples.
+    """
+    os.makedirs(output_dir, exist_ok=True)
+
+    # Build (skill_info, report_path) pairs
+    scan_jobs = []
+    for skill_info in skills:
+        report_name = f"{skill_info['provider']}__{skill_info['skill_name']}.json"
+        report_path = os.path.join(output_dir, report_name)
+        scan_jobs.append((skill_info, report_path))
+
+    if not parallel:
+        # Sequential execution
+        results = []
+        for skill_info, report_path in scan_jobs:
+            print("\n" + "#" * 60)
+            print(
+                f"# Scanning: [{skill_info['provider']}] "
+                f"{skill_info['skill_name']}"
+            )
+            print("#" * 60 + "\n")
+
+            success = _scan_single(
+                skill_info["path"],
+                report_path,
+                SkillScanner,
+                discover_skill_files,
+            )
+            results.append((skill_info, report_path, success))
+        return results
+
+    # Parallel execution
+    print(
+        f"[SkillScanner] Running {len(scan_jobs)} scan(s) in parallel "
+        f"(max {_DEFAULT_PARALLEL_WORKERS} workers)\n"
+    )
+
+    results = []
+    with ThreadPoolExecutor(max_workers=_DEFAULT_PARALLEL_WORKERS) as pool:
+        future_to_job = {}
+        for skill_info, report_path in scan_jobs:
+            future = pool.submit(
+                _scan_single,
+                skill_info["path"],
+                report_path,
+                SkillScanner,
+                discover_skill_files,
+            )
+            future_to_job[future] = (skill_info, report_path)
+
+        for future in as_completed(future_to_job):
+            skill_info, report_path = future_to_job[future]
+            try:
+                success = future.result()
+            except Exception as e:
+                print(
+                    f"[SkillScanner] Error scanning "
+                    f"{skill_info['skill_name']}: {e}",
+                    file=sys.stderr,
+                )
+                success = False
+            results.append((skill_info, report_path, success))
+
+    # Re-sort results to match original order
+    order = {id(si): idx for idx, (si, _) in enumerate(scan_jobs)}
+    results.sort(key=lambda r: order.get(id(r[0]), 0))
+
+    return results
+
+
+def _print_multi_summary(
+    results: List[Tuple[dict, str, bool]],
+    output_dir: str,
+    total_elapsed: float,
+) -> None:
+    """Print the final summary table for a multi-scan run."""
+    mins, secs = divmod(int(total_elapsed), 60)
+
+    print("\n\n" + "=" * 70)
+    print("  ALL SCANS COMPLETE")
+    print("=" * 70)
+    print(
+        f"  {'Provider':<10} {'Skill':<25} {'Verdict':<12} Report"
+    )
+    print("-" * 70)
+    for skill_info, report_path, success in results:
+        if success:
+            verdict = _read_verdict(report_path)
+        else:
+            verdict = "SKIPPED"
+        print(
+            f"  {skill_info['provider']:<10} "
+            f"{skill_info['skill_name']:<25} "
+            f"{verdict:<12} "
+            f"{report_path}"
+        )
+    print("-" * 70)
+    print(f"  Total time:   {mins}m {secs}s")
+    print(f"  Reports:      {output_dir}")
+    print("=" * 70)
+
+
 # ---------------------------------------------------------------------------
 # scan command
 # ---------------------------------------------------------------------------
 
 
 def cmd_scan(args: argparse.Namespace) -> None:
-    """Execute the skill-scanner crew against the given directory."""
+    """Execute the skill-scanner crew."""
     # ------------------------------------------------------------------
     # Load .env from the package repo root (won't override existing env vars)
     # ------------------------------------------------------------------
@@ -154,73 +506,122 @@ def cmd_scan(args: argparse.Namespace) -> None:
     from skill_scanner.crew import SkillScanner  # noqa: E402
     from skill_scanner.tools.file_discovery import discover_skill_files  # noqa: E402
 
-    skill_directory = os.path.abspath(args.skill_directory)
-    output_path = os.path.abspath(args.output)
+    # ------------------------------------------------------------------
+    # Determine scan mode
+    # ------------------------------------------------------------------
+    explicit_skill = getattr(args, "skill", None)
+    explicit_dir = getattr(args, "dir", None)
+    positional = args.skill_directory
+    parallel = getattr(args, "parallel", False)
 
-    # CrewAI's Task.output_file joins the path with cwd, so we must pass
-    # a relative path to avoid nested directory creation.
-    output_relpath = os.path.relpath(output_path)
+    # Mode 1: --skill /path  (single scan)
+    if explicit_skill:
+        skill_directory = os.path.abspath(explicit_skill)
+        if not os.path.isdir(skill_directory):
+            print(
+                f"Error: '{skill_directory}' is not a directory.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
-    # 1. Static file discovery
-    file_info = discover_skill_files(skill_directory)
+        output_path = os.path.abspath(args.output)
+        success = _scan_single(
+            skill_directory, output_path, SkillScanner, discover_skill_files
+        )
+        if not success:
+            sys.exit(1)
+        return
 
-    if file_info["skill_md_path"] is None:
+    # Mode 2: --dir /path  (multi-scan from parent directory)
+    if explicit_dir:
+        parent_dir = os.path.abspath(explicit_dir)
+        if not os.path.isdir(parent_dir):
+            print(
+                f"Error: '{parent_dir}' is not a directory.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        skills = _discover_skills_in_dir(parent_dir)
+        if not skills:
+            print(
+                f"[SkillScanner] No skill directories (with SKILL.md) "
+                f"found in '{parent_dir}'.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
+
+        output_dir = os.path.abspath(args.output)
+
+        print(f"[SkillScanner] Found {len(skills)} skill(s) in {parent_dir}:")
+        for s in skills:
+            print(f"  - {s['skill_name']}  ({s['path']})")
+        if parallel:
+            print(f"[SkillScanner] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
+        print()
+
+        t_start = time.monotonic()
+        results = _run_multi_scan(
+            skills, output_dir, parallel, SkillScanner, discover_skill_files
+        )
+        total_elapsed = time.monotonic() - t_start
+        _print_multi_summary(results, output_dir, total_elapsed)
+        return
+
+    # Mode 3: positional arg is a provider keyword or None (auto-discover)
+    if positional is None or positional.lower() in _PROVIDER_KEYWORDS:
+        provider = positional.lower() if positional else None
+        skills = _discover_skill_dirs(provider)
+
+        if not skills:
+            label = provider if provider else "any provider"
+            print(
+                f"[SkillScanner] No skill directories found for {label}.\n"
+                f"[SkillScanner] Searched paths:",
+                file=sys.stderr,
+            )
+            search = (
+                _SKILL_SEARCH_PATHS[provider]
+                if provider
+                else [p for paths in _SKILL_SEARCH_PATHS.values() for p in paths]
+            )
+            for sp in search:
+                expanded = os.path.abspath(os.path.expanduser(sp))
+                print(f"  - {expanded}", file=sys.stderr)
+            sys.exit(1)
+
+        output_dir = os.path.abspath(args.output)
+
+        print(f"[SkillScanner] Auto-discovered {len(skills)} skill(s):")
+        for s in skills:
+            print(f"  - [{s['provider']}] {s['skill_name']}  ({s['path']})")
+        if parallel:
+            print(f"[SkillScanner] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
+        print()
+
+        t_start = time.monotonic()
+        results = _run_multi_scan(
+            skills, output_dir, parallel, SkillScanner, discover_skill_files
+        )
+        total_elapsed = time.monotonic() - t_start
+        _print_multi_summary(results, output_dir, total_elapsed)
+        return
+
+    # Mode 4: positional arg is an explicit path (single scan, backward compat)
+    skill_directory = os.path.abspath(positional)
+    if not os.path.isdir(skill_directory):
         print(
-            f"Error: No SKILL.md found in '{skill_directory}'. "
-            "Are you sure this is an Agent Skill package?",
+            f"Error: '{skill_directory}' is not a directory.",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    # 2. Load bundled knowledge files
-    knowledge = _load_knowledge()
-
-    # 3. Determine whether file verification is needed
-    has_other_files = bool(
-        file_info["script_files"] or file_info["markdown_files"]
+    output_path = os.path.abspath(args.output)
+    success = _scan_single(
+        skill_directory, output_path, SkillScanner, discover_skill_files
     )
-
-    # 4. Build crew inputs
-    inputs = {
-        "skill_directory": file_info["skill_directory"],
-        "skill_md_path": file_info["skill_md_path"],
-        "file_discovery_results": json.dumps(file_info, indent=2),
-        "threat_categories": knowledge["threat_categories"],
-        "report_schema": knowledge["report_schema"],
-    }
-
-    # 5. Print summary
-    print(f"[SkillScanner] Model:          {model}")
-    print(f"[SkillScanner] Scanning:       {inputs['skill_directory']}")
-    print(f"[SkillScanner] SKILL.md:       {inputs['skill_md_path']}")
-    print(
-        f"[SkillScanner] Files found:    {len(file_info['all_files'])}"
-    )
-    print(f"[SkillScanner] Script files:   {len(file_info['script_files'])}")
-    if not has_other_files:
-        print(
-            "[SkillScanner] No script/reference files -- "
-            "skipping file verification"
-        )
-    print(f"[SkillScanner] Output:         {output_path}")
-    print()
-
-    # 6. Build crew and run
-    scanner = SkillScanner()
-    the_crew = scanner.build_crew(
-        include_file_verification=has_other_files,
-        output_file=output_relpath,
-    )
-
-    t_start = time.monotonic()
-    the_crew.kickoff(inputs=inputs)
-    elapsed = time.monotonic() - t_start
-
-    # 7. Append token usage + scan duration to report
-    _append_metadata(output_path, the_crew, elapsed)
-
-    # 8. Print summary
-    _print_summary(output_path, elapsed)
+    if not success:
+        sys.exit(1)
 
 
 # ---------------------------------------------------------------------------
@@ -245,17 +646,58 @@ def build_parser() -> argparse.ArgumentParser:
     # --- scan sub-command ---
     scan_parser = subparsers.add_parser(
         "scan",
-        help="Run the security scanner on a skill directory.",
+        help="Run the security scanner on skill directories.",
     )
+
+    # Positional: optional, for provider keywords or a direct skill path.
+    # A path is always treated as a single skill directory by default.
     scan_parser.add_argument(
         "skill_directory",
-        help="Path to the Agent Skill directory to scan.",
+        nargs="?",
+        default=None,
+        help=(
+            "Path to a skill directory (treated as a single skill by default), "
+            "or a provider keyword (cursor/claude/codex) to auto-discover. "
+            "Omit to auto-discover from all providers. "
+            "Use --dir to scan a directory of multiple skills."
+        ),
     )
+
+    # Explicit path flags (mutually exclusive with each other)
+    path_group = scan_parser.add_mutually_exclusive_group()
+    path_group.add_argument(
+        "--skill",
+        metavar="PATH",
+        default=None,
+        help="Path to a single skill directory to scan.",
+    )
+    path_group.add_argument(
+        "--dir",
+        metavar="PATH",
+        default=None,
+        help=(
+            "Path to a parent directory containing multiple skill "
+            "subdirectories. Each subdirectory with a SKILL.md is scanned."
+        ),
+    )
+
     scan_parser.add_argument(
         "-o",
         "--output",
-        default="report.json",
-        help="Path for the output report (default: report.json).",
+        default=None,
+        help=(
+            "For single scan: output report file (default: report.json). "
+            "For multi-scan: output directory (default: ./skill_scanner_reports)."
+        ),
+    )
+    scan_parser.add_argument(
+        "--parallel",
+        action="store_true",
+        default=False,
+        help=(
+            "Scan multiple skills in parallel (up to 5 concurrent scans). "
+            "Only applies when scanning multiple skills (auto-discover or --dir)."
+        ),
     )
     scan_parser.add_argument(
         "-m",
@@ -286,11 +728,30 @@ def _get_version() -> str:
         return "unknown"
 
 
+def _is_multi_scan_mode(args: argparse.Namespace) -> bool:
+    """Determine if the scan will process multiple skills."""
+    if getattr(args, "dir", None):
+        return True
+    if getattr(args, "skill", None):
+        return False
+    positional = args.skill_directory
+    if positional is None or positional.lower() in _PROVIDER_KEYWORDS:
+        return True
+    return False
+
+
 def main() -> None:
     parser = build_parser()
     args = parser.parse_args()
 
     if args.command == "scan":
+        # Set default for -o based on scan mode
+        if args.output is None:
+            if _is_multi_scan_mode(args):
+                args.output = "skill_scanner_reports"
+            else:
+                args.output = "report.json"
+
         cmd_scan(args)
     else:
         parser.print_help()
