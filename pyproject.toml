@@ -1,5 +1,5 @@
 [project]
-name = "enkryptai-skill-scanner"
+name = "skill-sentinel"
 version = "0.1.0"
 description = "Scan Agent Skill packages for security threats using multi-agent AI analysis"
 authors = [{ name = "Enkrypt AI" }]
@@ -24,16 +24,16 @@ dependencies = [
 ]
 
 [project.scripts]
-enkryptai-skill-scanner = "skill_scanner.cli:main"
+skill-sentinel = "skill_sentinel.cli:main"
 
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/skill_scanner"]
+packages = ["src/skill_sentinel"]
 
 # Ensure non-Python data files are included in the wheel
 [tool.hatch.build.targets.wheel.force-include]
-"src/skill_scanner/config" = "skill_scanner/config"
-"src/skill_scanner/data" = "skill_scanner/data"
+"src/skill_sentinel/config" = "skill_sentinel/config"
+"src/skill_sentinel/data" = "skill_sentinel/data"

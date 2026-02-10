@@ -2,8 +2,8 @@
 """
 Programmatic helpers for the SkillScanner CrewAI crew.
 
-The primary user-facing entry point is ``skill_scanner.cli:main``
-(registered as the ``enkryptai-skill-scanner`` console script).
+The primary user-facing entry point is ``skill_sentinel.cli:main``
+(registered as the ``skill-sentinel`` console script).
 
 This module provides a simple ``scan()`` function for use as a library.
 """
@@ -14,8 +14,8 @@ import warnings
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
-from skill_scanner.crew import SkillScanner
-from skill_scanner.tools.file_discovery import discover_skill_files
+from skill_sentinel.crew import SkillScanner
+from skill_sentinel.tools.file_discovery import discover_skill_files
 
 # The bundled data directory lives next to this file at install time.
 _DATA_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "data")
@@ -56,7 +56,7 @@ def _append_token_usage(report_path: str, crew_instance) -> None:
             json.dump(report_data, f, indent=2)
     except Exception as e:
         print(
-            f"[SkillScanner] Warning: Could not append token usage: {e}"
+            f"[Skill Sentinel] Warning: Could not append token usage: {e}"
         )
 
 

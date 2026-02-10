@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 """
-CLI entry point for enkryptai-skill-scanner.
+CLI entry point for skill-sentinel.
 
 Usage:
-    enkryptai-skill-scanner scan [<provider>] [OPTIONS]
-    enkryptai-skill-scanner scan --skill /path/to/skill [-o report.json]
-    enkryptai-skill-scanner scan --dir /path/to/parent [-o reports_dir] [--parallel]
+    skill-sentinel scan [<provider>] [OPTIONS]
+    skill-sentinel scan --skill /path/to/skill [-o report.json]
+    skill-sentinel scan --dir /path/to/parent [-o reports_dir] [--parallel]
 """
 
 import argparse
@@ -196,7 +196,7 @@ def _append_metadata(
 
     except Exception as e:
         print(
-            f"\n[SkillScanner] Warning: Could not append metadata to report: {e}"
+            f"\n[Skill Sentinel] Warning: Could not append metadata to report: {e}"
         )
 
 
@@ -209,7 +209,7 @@ def _print_summary(report_path: str, elapsed_seconds: float) -> None:
         with open(report_path, "r") as f:
             report = json.load(f)
     except Exception:
-        print(f"\n[SkillScanner] Done ({duration_str}). Report written to {report_path}")
+        print(f"\n[Skill Sentinel] Done ({duration_str}). Report written to {report_path}")
         return
 
     risk = report.get("overall_risk_assessment", {})
@@ -277,7 +277,7 @@ def _scan_single(
 
     if file_info["skill_md_path"] is None:
         print(
-            f"[SkillScanner] Warning: No SKILL.md found in '{skill_directory}' "
+            f"[Skill Sentinel] Warning: No SKILL.md found in '{skill_directory}' "
             "-- skipping.",
             file=sys.stderr,
         )
@@ -302,19 +302,19 @@ def _scan_single(
 
     # 5. Print pre-scan info
     model = os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
-    print(f"[SkillScanner] Model:          {model}")
-    print(f"[SkillScanner] Scanning:       {inputs['skill_directory']}")
-    print(f"[SkillScanner] SKILL.md:       {inputs['skill_md_path']}")
+    print(f"[Skill Sentinel] Model:          {model}")
+    print(f"[Skill Sentinel] Scanning:       {inputs['skill_directory']}")
+    print(f"[Skill Sentinel] SKILL.md:       {inputs['skill_md_path']}")
     print(
-        f"[SkillScanner] Files found:    {len(file_info['all_files'])}"
+        f"[Skill Sentinel] Files found:    {len(file_info['all_files'])}"
     )
-    print(f"[SkillScanner] Script files:   {len(file_info['script_files'])}")
+    print(f"[Skill Sentinel] Script files:   {len(file_info['script_files'])}")
     if not has_other_files:
         print(
-            "[SkillScanner] No script/reference files -- "
+            "[Skill Sentinel] No script/reference files -- "
             "skipping file verification"
         )
-    print(f"[SkillScanner] Output:         {output_path}")
+    print(f"[Skill Sentinel] Output:         {output_path}")
     print()
 
     # 6. Build crew and run
@@ -393,7 +393,7 @@ def _run_multi_scan(
 
     # Parallel execution
     print(
-        f"[SkillScanner] Running {len(scan_jobs)} scan(s) in parallel "
+        f"[Skill Sentinel] Running {len(scan_jobs)} scan(s) in parallel "
         f"(max {_DEFAULT_PARALLEL_WORKERS} workers)\n"
     )
 
@@ -416,7 +416,7 @@ def _run_multi_scan(
                 success = future.result()
             except Exception as e:
                 print(
-                    f"[SkillScanner] Error scanning "
+                    f"[Skill Sentinel] Error scanning "
                     f"{skill_info['skill_name']}: {e}",
                     file=sys.stderr,
                 )
@@ -503,8 +503,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     # Heavy imports after env is configured
     # ------------------------------------------------------------------
-    from skill_scanner.crew import SkillScanner  # noqa: E402
-    from skill_scanner.tools.file_discovery import discover_skill_files  # noqa: E402
+    from skill_sentinel.crew import SkillScanner  # noqa: E402
+    from skill_sentinel.tools.file_discovery import discover_skill_files  # noqa: E402
 
     # ------------------------------------------------------------------
     # Determine scan mode
@@ -545,7 +545,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
         skills = _discover_skills_in_dir(parent_dir)
         if not skills:
             print(
-                f"[SkillScanner] No skill directories (with SKILL.md) "
+                f"[Skill Sentinel] No skill directories (with SKILL.md) "
                 f"found in '{parent_dir}'.",
                 file=sys.stderr,
             )
@@ -553,11 +553,11 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
         output_dir = os.path.abspath(args.output)
 
-        print(f"[SkillScanner] Found {len(skills)} skill(s) in {parent_dir}:")
+        print(f"[Skill Sentinel] Found {len(skills)} skill(s) in {parent_dir}:")
         for s in skills:
             print(f"  - {s['skill_name']}  ({s['path']})")
         if parallel:
-            print(f"[SkillScanner] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
+            print(f"[Skill Sentinel] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
         print()
 
         t_start = time.monotonic()
@@ -576,8 +576,8 @@ def cmd_scan(args: argparse.Namespace) -> None:
         if not skills:
             label = provider if provider else "any provider"
             print(
-                f"[SkillScanner] No skill directories found for {label}.\n"
-                f"[SkillScanner] Searched paths:",
+                f"[Skill Sentinel] No skill directories found for {label}.\n"
+                f"[Skill Sentinel] Searched paths:",
                 file=sys.stderr,
             )
             search = (
@@ -592,11 +592,11 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
         output_dir = os.path.abspath(args.output)
 
-        print(f"[SkillScanner] Auto-discovered {len(skills)} skill(s):")
+        print(f"[Skill Sentinel] Auto-discovered {len(skills)} skill(s):")
         for s in skills:
             print(f"  - [{s['provider']}] {s['skill_name']}  ({s['path']})")
         if parallel:
-            print(f"[SkillScanner] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
+            print(f"[Skill Sentinel] Parallel mode: up to {_DEFAULT_PARALLEL_WORKERS} concurrent scans")
         print()
 
         t_start = time.monotonic()
@@ -631,7 +631,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        prog="enkryptai-skill-scanner",
+        prog="skill-sentinel",
         description="Scan an Agent Skill package for security threats.",
     )
     parser.add_argument(
@@ -687,7 +687,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "For single scan: output report file (default: report.json). "
-            "For multi-scan: output directory (default: ./skill_scanner_reports)."
+            "For multi-scan: output directory (default: ./skill_sentinel_reports)."
         ),
     )
     scan_parser.add_argument(
@@ -721,7 +721,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 def _get_version() -> str:
     try:
-        from skill_scanner import __version__
+        from skill_sentinel import __version__
 
         return __version__
     except Exception:
@@ -748,7 +748,7 @@ def main() -> None:
         # Set default for -o based on scan mode
         if args.output is None:
             if _is_multi_scan_mode(args):
-                args.output = "skill_scanner_reports"
+                args.output = "skill_sentinel_reports"
             else:
                 args.output = "report.json"
 

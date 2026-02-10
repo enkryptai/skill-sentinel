@@ -1,4 +1,4 @@
-# Enkrypt AI Skill Scanner
+# Enkrypt AI Skill Sentinel
 
 A security scanner for Agent Skill packages. It uses multi-agent analysis to detect prompt injection, data exfiltration, command injection, and other threats in skill packages.
 
@@ -35,13 +35,13 @@ pip install -e .
 export OPENAI_API_KEY="sk-..."
 
 # 2. Scan a skill directory
-enkryptai-skill-scanner scan /path/to/skill/directory
+skill-sentinel scan /path/to/skill/directory
 ```
 
 ## Usage
 
 ```
-enkryptai-skill-scanner scan [provider] [OPTIONS]
+skill-sentinel scan [provider] [OPTIONS]
 
 Positional:
   provider              cursor / claude / codex to auto-discover that
@@ -54,7 +54,7 @@ Path flags (mutually exclusive):
 
 Options:
   -o, --output PATH     Single scan: output file (default: report.json).
-                        Multi-scan: output directory (default: ./skill_scanner_reports).
+                        Multi-scan: output directory (default: ./skill_sentinel_reports).
   --parallel            Scan multiple skills in parallel (5 concurrent).
   -m, --model MODEL     OpenAI model to use (default: gpt-4.1).
   --api-key KEY         OpenAI API key (prefer OPENAI_API_KEY env var).
@@ -65,30 +65,30 @@ Options:
 
 ```bash
 # Scan a single skill directory
-enkryptai-skill-scanner scan --skill ./my-skill
-enkryptai-skill-scanner scan --skill ./my-skill -o report.json
+skill-sentinel scan --skill ./my-skill
+skill-sentinel scan --skill ./my-skill -o report.json
 
 # Scan all skills inside a parent directory
-enkryptai-skill-scanner scan --dir ./all-my-skills/
-enkryptai-skill-scanner scan --dir ./all-my-skills/ -o ./reports/
+skill-sentinel scan --dir ./all-my-skills/
+skill-sentinel scan --dir ./all-my-skills/ -o ./reports/
 
 # Scan in parallel (5 concurrent)
-enkryptai-skill-scanner scan --dir ./all-my-skills/ --parallel
+skill-sentinel scan --dir ./all-my-skills/ --parallel
 
 # Auto-discover and scan ALL skills from cursor, claude, and codex paths
-enkryptai-skill-scanner scan
+skill-sentinel scan
 
 # Auto-discover only Cursor skills, in parallel
-enkryptai-skill-scanner scan cursor --parallel
+skill-sentinel scan cursor --parallel
 
 # Scan only Claude skills
-enkryptai-skill-scanner scan claude
+skill-sentinel scan claude
 
 # Custom output directory for auto-discovery
-enkryptai-skill-scanner scan codex -o ./my-reports/
+skill-sentinel scan codex -o ./my-reports/
 
 # Use a different model
-enkryptai-skill-scanner scan --skill ./my-skill -m gpt-4o
+skill-sentinel scan --skill ./my-skill -m gpt-4o
 ```
 
 ### Auto-Discovery
@@ -104,12 +104,12 @@ When no path is given (or a provider keyword is used), the scanner searches thes
 | `~/.claude/skills/` | User-level global (Claude) |
 | `~/.codex/skills/` | User-level global (Codex) |
 
-Reports are saved as `<provider>__<skill_name>.json` in `./skill_scanner_reports/` (or the directory specified with `-o`).
+Reports are saved as `<provider>__<skill_name>.json` in `./skill_sentinel_reports/` (or the directory specified with `-o`).
 
 ### Programmatic Usage
 
 ```python
-from skill_scanner.main import scan
+from skill_sentinel.main import scan
 
 report = scan("/path/to/skill", output_path="report.json", model="gpt-4.1")
 print(report["overall_risk_assessment"]["skill_verdict"])
@@ -143,7 +143,7 @@ The scanner writes a JSON report containing:
 skill_scanner_package/
 ├── pyproject.toml              # Package build config
 ├── README.md
-└── src/skill_scanner/
+└── src/skill_sentinel/
     ├── __init__.py             # Package version
     ├── cli.py                  # CLI entry point
     ├── main.py                 # Programmatic API
