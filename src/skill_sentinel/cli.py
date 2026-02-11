@@ -21,7 +21,7 @@ from typing import List, Optional, Tuple
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
 
 # Provider keywords that trigger auto-discovery instead of path lookup
-_PROVIDER_KEYWORDS = {"cursor", "claude", "codex"}
+_PROVIDER_KEYWORDS = {"cursor", "claude", "codex", "openclaw"}
 
 # Well-known skill directory locations per provider.
 # Project-level paths are relative to cwd; user-level paths use ~.
@@ -37,6 +37,10 @@ _SKILL_SEARCH_PATHS = {
     "codex": [
         os.path.join(".", ".codex", "skills"),
         os.path.join("~", ".codex", "skills"),
+    ],
+    "openclaw": [
+        os.path.join(".", "skills"),
+        os.path.join("~", ".openclaw", "skills"),
     ],
 }
 
@@ -697,7 +701,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help=(
             "Path to a skill directory (treated as a single skill by default), "
-            "or a provider keyword (cursor/claude/codex) to auto-discover. "
+            "or a provider keyword (cursor/claude/codex/openclaw) to auto-discover. "
             "Omit to auto-discover from all providers. "
             "Use --dir to scan a directory of multiple skills."
         ),

@@ -54,7 +54,7 @@ cp .env.example .env
 skill-sentinel scan [provider] [OPTIONS]
 
 Positional:
-  provider              cursor / claude / codex to auto-discover that
+  provider              cursor / claude / codex / openclaw to auto-discover that
                         provider's skills, or omit to discover all.
                         Can also be a direct path to a skill directory.
 
@@ -85,7 +85,7 @@ skill-sentinel scan --dir ./all-my-skills/ -o ./reports/
 # Scan in parallel (5 concurrent)
 skill-sentinel scan --dir ./all-my-skills/ --parallel
 
-# Auto-discover and scan ALL skills from cursor, claude, and codex paths
+# Auto-discover and scan ALL skills from cursor, claude, codex, and openclaw paths
 skill-sentinel scan
 
 # Auto-discover only Cursor skills, in parallel
@@ -110,9 +110,11 @@ When no path is given (or a provider keyword is used), the scanner searches thes
 | `.cursor/skills/` | Project-level (Cursor) |
 | `.claude/skills/` | Project-level (Claude) |
 | `.codex/skills/` | Project-level (Codex) |
+| `skills/` | Agent workspace-level (OpenClaw) |
 | `~/.cursor/skills/` | User-level global (Cursor) |
 | `~/.claude/skills/` | User-level global (Claude) |
 | `~/.codex/skills/` | User-level global (Codex) |
+| `~/.openclaw/skills/` | User-level global (OpenClaw) |
 
 Reports are saved as `<provider>__<skill_name>.json` in `./skill_sentinel_reports/` (or the directory specified with `-o`).
 
