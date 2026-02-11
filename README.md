@@ -1,6 +1,50 @@
-# Enkrypt AI Skill Sentinel
+# <img src="assets/skill-sentinel.png" alt="Skill Sentinel" width="32" style="vertical-align: middle;"> Enkrypt AI Skill Sentinel
 
-A security scanner for Agent Skill packages. It uses multi-agent analysis to detect prompt injection, data exfiltration, command injection, malware, and other threats in skill packages.
+A security scanner for Agent Skill packages. Skill Sentinel uses multi-agent AI analysis to detect prompt injection, data exfiltration, command injection, malware, and other threats hiding in skill packages for Cursor, Claude Code, Codex, and OpenClaw.
+
+<div align="center">
+  <img src="assets/skill-sentinel-features.png" width="800" alt="Skill Sentinel">
+</div>
+
+Agent Skills extend AI coding assistants with custom instructions and scripts — but they also create a new attack surface. A single malicious skill can steal credentials, inject hidden prompts, exfiltrate code, or execute arbitrary commands. Skill Sentinel catches these threats before they reach your agent.
+
+### Supported Platforms
+
+<table>
+  <tr>
+    <td align="center" width="120"><img src="assets/cursor.png" alt="Cursor" width="40"><br><b>Cursor</b></td>
+    <td align="center" width="120"><img src="assets/claude.png" alt="Claude Code" width="40"><br><b>Claude Code</b></td>
+    <td align="center" width="120"><img src="assets/codex.png" alt="Codex" width="40"><br><b>Codex</b></td>
+    <td align="center" width="120"><img src="assets/openclaw.png" alt="OpenClaw" width="40"><br><b>OpenClaw</b></td>
+    <td align="center" width="120"><i>and other agents</i></td>
+  </tr>
+</table>
+
+## Key Features
+
+### 🔍 Multi-Agent Security Pipeline
+
+Specialized agents work together to analyze Skills from multiple angles — manifest inspection, file verification, cross-referencing, and threat correlation.
+
+### 🦠 Built-in Malware Detection
+
+Automatic VirusTotal integration scans binary files (executables, archives, PDFs) for known malware before any LLM analysis begins.
+
+### 📄 No Truncation Limits
+
+Reads complete file contents without arbitrary cutoffs — catching malicious instructions hidden deep in documentation where other scanners stop looking.
+
+### 🔗 Cross-File Threat Correlation
+
+Detects sophisticated attacks that span multiple files by tracking data flows and verifying that script behavior matches documented claims.
+
+### 🎯 AI Agent Attack Detection
+
+Purpose-built for prompt injection, command injection, credential theft, and other threats specific to AI coding assistants.
+
+### ⚡ Parallel Bulk Scanning
+
+Scan entire directories of Skills concurrently with organized reports — audit all your Cursor, Claude Code, Codex, and OpenClaw Skills in one command.
 
 ## Installation
 
@@ -189,3 +233,48 @@ skill_scanner_package/
 | `OPENAI_API_KEY` | Your OpenAI API key (required) | — |
 | `OPENAI_MODEL_NAME` | Model to use for analysis | `gpt-4.1` |
 | `VIRUSTOTAL_API_KEY` | VirusTotal API key for binary malware scanning (optional) | — |
+
+## Threat Categories
+
+Skill Sentinel detects the following threat categories, mapped to [OWASP Top 10 for LLM Applications 2025](https://genai.owasp.org/llm-top-10/) and [OWASP Top 10 for Agentic Applications](https://genai.owasp.org/agentic-top-10/):
+
+| Category | Severity | Description |
+|---|---|---|
+| Prompt Injection | HIGH–CRITICAL | Override attempts, mode changes, policy bypass hidden in SKILL.md |
+| Transitive Trust Abuse | HIGH | Instructions that delegate trust to external/untrusted data sources |
+| Data Exfiltration | CRITICAL | Network calls that steal credentials, files, or environment variables |
+| Command Injection | CRITICAL | Dangerous `eval()`, `exec()`, `os.system()`, shell injection |
+| Hardcoded Secrets | CRITICAL | API keys, passwords, private keys embedded in code |
+| Obfuscation | HIGH | Base64 blobs + exec, hex-encoded payloads, deliberately unreadable code |
+| Unauthorized Tool Use | HIGH | Code that violates the skill's own `allowed-tools` declaration |
+| Skill Discovery Abuse | HIGH | Brand impersonation, keyword baiting, misleading descriptions |
+| Tool Chaining Abuse | HIGH | Multi-step workflows that read sensitive data then transmit it |
+| Resource Abuse | MEDIUM | Infinite loops, unbounded memory allocation, recursive bombs |
+| Autonomy Abuse | MEDIUM | Unsolicited activation, unbounded retries, no user confirmation |
+| Over-Collection | MEDIUM | Disproportionate data access relative to stated purpose |
+| Cross-Context Bridging | MEDIUM | Accessing data from other sessions, conversations, or workspaces |
+| Dependency Risk | MEDIUM | Unpinned `pip install`, typosquatting, unknown GitHub repos |
+| Malware | MEDIUM–CRITICAL | Binary files flagged by VirusTotal or unverifiable binaries |
+
+## Contributing
+
+Contributions are welcome! To get started:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Set up the development environment:
+
+```bash
+uv venv --python 3.13 .venv
+source .venv/bin/activate
+uv pip install -e .
+```
+
+4. Make your changes
+5. Submit a pull request
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+
+Copyright 2025 [Enkrypt AI, Inc.](https://www.enkryptai.com/)
