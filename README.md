@@ -50,25 +50,33 @@ Scan entire directories of Skills concurrently with organized reports — audit 
 
 Requires Python >= 3.10, < 3.14.
 
-### Using uv (recommended)
+### From PyPI
 
 ```bash
+pip install skill-sentinel
+```
+
+Or using `uv` (recommended):
+
+```bash
+uv pip install skill-sentinel
+```
+
+### From Source
+
+For development or local modifications:
+
+```bash
+# Clone the repository
+git clone https://github.com/enkryptai/skill-sentinel.git
+cd skill-sentinel
+
+# Install with uv (recommended)
 uv venv --python 3.13 .venv
 source .venv/bin/activate
-uv pip install .
-```
-
-### Using pip
-
-```bash
-pip install .
-```
-
-For development (editable mode):
-
-```bash
 uv pip install -e .
-# or
+
+# Or install with pip
 pip install -e .
 ```
 

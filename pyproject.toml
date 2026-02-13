@@ -34,7 +34,12 @@ build-backend = "hatchling.build"
 [tool.hatch.build.targets.wheel]
 packages = ["src/skill_sentinel"]
 
-# Ensure non-Python data files are included in the wheel
-[tool.hatch.build.targets.wheel.force-include]
-"src/skill_sentinel/config" = "skill_sentinel/config"
-"src/skill_sentinel/data" = "skill_sentinel/data"
+[tool.hatch.build]
+# Include non-Python data files (yaml, json, md) in the wheel
+include = [
+    "src/skill_sentinel/**/*.py",
+    "src/skill_sentinel/**/*.yaml",
+    "src/skill_sentinel/**/*.yml",
+    "src/skill_sentinel/**/*.json",
+    "src/skill_sentinel/**/*.md",
+]
