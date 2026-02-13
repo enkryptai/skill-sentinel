@@ -785,6 +785,9 @@ def _is_multi_scan_mode(args: argparse.Namespace) -> bool:
 
 
 def main() -> None:
+    # Disable CrewAI telemetry/tracing prompt by default
+    os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
+    
     parser = build_parser()
     args = parser.parse_args()
 

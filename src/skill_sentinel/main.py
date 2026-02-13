@@ -77,6 +77,9 @@ def scan(
     Returns:
         The parsed report dict.
     """
+    # Disable CrewAI telemetry/tracing prompt by default
+    os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
+    
     if model:
         os.environ["OPENAI_MODEL_NAME"] = model
 
