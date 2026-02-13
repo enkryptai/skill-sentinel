@@ -1,6 +1,6 @@
 [project]
 name = "skill-sentinel"
-version = "0.1.0"
+version = "0.1.1"
 description = "Scan Agent Skill packages for security threats using multi-agent AI analysis"
 authors = [{ name = "Enkrypt AI" }]
 license = { text = "Apache-2.0" }
@@ -17,12 +17,17 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
 ]
-
 dependencies = [
     "crewai[tools]>=1.9,<2.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
 ]
+
+[project.urls]
+Homepage = "https://github.com/enkryptai/skill-sentinel"
+Repository = "https://github.com/enkryptai/skill-sentinel"
+Documentation = "https://github.com/enkryptai/skill-sentinel#readme"
+Issues = "https://github.com/enkryptai/skill-sentinel/issues"
 
 [project.scripts]
 skill-sentinel = "skill_sentinel.cli:main"
