@@ -266,20 +266,7 @@ Skill Sentinel detects the following threat categories, mapped to [OWASP Top 10 
 
 ## Contributing
 
-Contributions are welcome! To get started:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Set up the development environment:
-
-```bash
-uv venv --python 3.13 .venv
-source .venv/bin/activate
-uv pip install -e .
-```
-
-4. Make your changes
-5. Submit a pull request
+Contributions are welcome! By submitting a pull request or other contribution, you agree to the terms of our [Contributor License Agreement (CLA)](CLA.md). See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, project structure, and how to submit a PR.
 
 ## License
 
