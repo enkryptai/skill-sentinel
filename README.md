@@ -210,6 +210,9 @@ The scanner writes a JSON report containing:
 - `references` — VirusTotal scan links and other reference URLs
 - `overall_risk_assessment` — risk level, verdict (SAFE / SUSPICIOUS / MALICIOUS), reasoning
 - `token_usage` — LLM token usage metrics for the scan
+- `skill_name` — skill name from the SKILL.md frontmatter (falls back to the folder name)
+- `content_hash` — sha256 over all files in the skill directory (a change/dedup key)
+- `scan_duration` — wall-clock scan time (`{seconds, display}`)
 
 ## Project Structure
 

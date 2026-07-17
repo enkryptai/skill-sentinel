@@ -3,6 +3,26 @@
 All notable changes to skill-sentinel are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.3.0]
+
+### Added — report metadata computed by the scanner
+
+The report now includes deterministic, code-computed fields about the scanned
+skill (injected in the same finalize step as `token_usage`, not produced by the
+LLM):
+
+- **`skill_name`** — parsed from the `SKILL.md` YAML frontmatter `name:` (falls
+  back to the skill directory's basename). Callers no longer need to supply it.
+- **`content_hash`** — `sha256` over **all files** in the skill directory
+  (`SKILL.md` plus every supporting script/reference/binary), hashed in sorted
+  relative-path order. Unlike a `SKILL.md`-only hash, this changes if *any* file
+  changes, so it is a reliable change/dedup key for the full skill package.
+- **`scan_duration`** — `{seconds, display}`, measured as the wall-clock time of
+  the scan (previously not emitted).
+
+Additive, backward-compatible: no changes to inputs, the CLI, dependencies, or
+existing report fields.
+
 ## [0.2.0]
 
 ### Changed — finding calibration (especially for reasoning/mini models)

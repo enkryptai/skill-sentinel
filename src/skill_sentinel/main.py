@@ -8,8 +8,11 @@ The primary user-facing entry point is ``skill_sentinel.cli:main``
 This module provides a simple ``scan()`` function for use as a library.
 """
 
+import hashlib
 import json
 import os
+import re
+import time
 import warnings
 
 warnings.filterwarnings("ignore", category=SyntaxWarning, module="pysbd")
@@ -34,8 +37,67 @@ def _load_knowledge() -> dict:
     }
 
 
-def _append_token_usage(report_path: str, crew_instance) -> None:
-    """Read the report JSON, inject crew usage_metrics, and write back."""
+def _extract_skill_name(skill_md_path: str, skill_directory: str) -> str:
+    """Skill name from the SKILL.md YAML frontmatter ``name:`` field, falling
+    back to the skill directory's basename when absent."""
+    fallback = os.path.basename(os.path.normpath(skill_directory))
+    if not skill_md_path or not os.path.isfile(skill_md_path):
+        return fallback
+    try:
+        with open(skill_md_path, "r", encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    except OSError:
+        return fallback
+    lines = text.splitlines()
+    if not lines or lines[0].strip() != "---":
+        return fallback
+    for line in lines[1:]:
+        if line.strip() == "---":
+            break
+        m = re.match(r"\s*name\s*:\s*(.+?)\s*$", line)
+        if m:
+            return m.group(1).strip().strip("'\"") or fallback
+    return fallback
+
+
+def _compute_content_hash(skill_directory: str) -> str:
+    """Deterministic sha256 over ALL files in the skill directory (SKILL.md plus
+    every supporting script/reference/binary). Each file contributes its POSIX
+    relative path and raw bytes, in sorted path order, so a change to any file
+    changes the hash. Symlinks and the .git directory are skipped."""
+    h = hashlib.sha256()
+    root = os.path.abspath(skill_directory)
+    entries = []
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = [d for d in dirnames if d != ".git"]
+        for name in filenames:
+            full = os.path.join(dirpath, name)
+            if os.path.islink(full):
+                continue
+            rel = os.path.relpath(full, root).replace(os.sep, "/")
+            entries.append((rel, full))
+    for rel, full in sorted(entries):
+        h.update(rel.encode("utf-8"))
+        h.update(b"\0")
+        try:
+            with open(full, "rb") as f:
+                for chunk in iter(lambda: f.read(65536), b""):
+                    h.update(chunk)
+        except OSError:
+            continue
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def _finalize_report(
+    report_path: str,
+    crew_instance,
+    skill_directory: str,
+    skill_md_path: str,
+    elapsed_seconds: float,
+) -> None:
+    """Inject deterministic, code-computed fields into the report and write back:
+    token usage, skill name, a full-directory content hash, and scan duration."""
     try:
         with open(report_path, "r") as f:
             raw = f.read().strip()
@@ -52,12 +114,21 @@ def _append_token_usage(report_path: str, crew_instance) -> None:
         report_data["token_usage"] = json.loads(
             crew_instance.usage_metrics.model_dump_json()
         )
+        report_data["skill_name"] = _extract_skill_name(
+            skill_md_path, skill_directory
+        )
+        report_data["content_hash"] = _compute_content_hash(skill_directory)
+        minutes, seconds = divmod(int(elapsed_seconds), 60)
+        report_data["scan_duration"] = {
+            "seconds": round(elapsed_seconds, 1),
+            "display": f"{minutes}m {seconds}s",
+        }
 
         with open(report_path, "w") as f:
             json.dump(report_data, f, indent=2)
     except Exception as e:
         print(
-            f"[Skill Sentinel] Warning: Could not append token usage: {e}"
+            f"[Skill Sentinel] Warning: Could not finalize report: {e}"
         )
 
 
@@ -75,7 +146,10 @@ def scan(
         model: OpenAI model name (default: gpt-5.4-mini or OPENAI_MODEL_NAME env).
 
     Returns:
-        The parsed report dict.
+        The parsed report dict. Alongside the analysis fields it includes
+        code-computed metadata: ``token_usage``, ``skill_name`` (from SKILL.md),
+        ``content_hash`` (sha256 over every file in the skill dir), and
+        ``scan_duration``.
     """
     # Disable CrewAI telemetry/tracing prompt by default
     os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
@@ -135,9 +209,17 @@ def scan(
         include_file_verification=has_other_files,
         output_file=output_relpath,
     )
+    started_at = time.monotonic()
     the_crew.kickoff(inputs=inputs)
+    elapsed_seconds = time.monotonic() - started_at
 
-    _append_token_usage(output_path, the_crew)
+    _finalize_report(
+        output_path,
+        the_crew,
+        file_info["skill_directory"],
+        file_info["skill_md_path"],
+        elapsed_seconds,
+    )
 
     with open(output_path, "r") as f:
         return json.load(f)
