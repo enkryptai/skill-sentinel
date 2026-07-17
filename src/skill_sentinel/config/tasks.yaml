@@ -191,12 +191,42 @@ report_synthesis_task:
        and unverified files alike) into this array. If no VT links exist,
        output an empty array: "references": [].
 
-    3. FILTER FALSE POSITIVES aggressively:
-       - Pattern matches without malicious context -> remove
-       - Internal skill file reads -> normal, not a threat
-       - Standard library for documented purposes -> safe
-       - Keywords in comments/documentation -> not a threat
-       - When in doubt and no exfiltration -> probably safe
+    3. APPLY THE THREAT GATE to EVERY candidate finding from the previous
+       task(s). A candidate may REMAIN in validated_findings ONLY if the ACTUAL
+       file content shows at least one of:
+       - EXFILTRATION: sensitive data (credentials, keys, env secrets, private
+         files, or the user's data) sent to an UNDISCLOSED or suspicious destination
+       - INJECTION / EXECUTION: prompt-injection or override text, or code that
+         executes attacker-controlled or externally-fetched instructions
+       - CONCEALMENT / MISMATCH: behavior hidden from the user, or SKILL.md
+         discloses one thing while the code actually does another
+       - MALWARE: a VirusTotal-flagged or unexplained executable/archive
+       If a candidate meets NONE of these, MOVE IT to false_positives with a
+       one-line reason. ALWAYS route the following to false_positives, NEVER to
+       validated_findings:
+       - documented or first-party network / AI-API calls; link-health checks;
+         any network egress that carries no sensitive data
+       - reading the skill's own bundled OR generated files/logs/artifacts
+       - bounded retries, disclosed fallbacks, documented auto/implicit invocation
+       - verbose-but-honest descriptions that match implemented features
+       - external material used as plain INPUT (not executed as instructions)
+       - missing optional metadata; keywords in comments/docs; coding mistakes
+       When in doubt and there is no exfiltration / injection / concealment /
+       malware, it is a FALSE POSITIVE, not a finding.
+
+    3b. SET SEVERITY from the malicious IMPACT you actually confirmed, NOT from a
+        category's "Default Severity". Never inherit a category default for a benign
+        or disclosed instance. A finding with no concrete malicious impact does not
+        survive -> move it to false_positives. LOW is NOT an escape hatch: if an
+        item does not pass the THREAT GATE, it is a false_positive no matter how
+        minor it seems - do NOT keep documented, disclosed, first-party, or
+        otherwise benign behavior as a LOW validated_finding. Use LOW in
+        validated_findings ONLY for a genuine, gate-passing threat of minor impact.
+
+    3c. OUTPUT INTEGRITY: every issue must appear in EXACTLY ONE of
+        validated_findings or false_positives - never both. Every snippet/evidence
+        value MUST be copied VERBATIM from the actual file; if you cannot quote the
+        exact source text, DROP the finding. Do not paraphrase or invent evidence.
 
     4. PRIORITIZE remaining findings by real-world exploitability:
        - Malware confirmed by VirusTotal (malicious > 0) = CRITICAL
@@ -210,6 +240,15 @@ report_synthesis_task:
 
     5. CONSOLIDATE related findings into single actionable items using the
        correlations field.
+
+    5b. VERDICT CALIBRATION - set overall_risk_assessment from the SURVIVING
+        validated_findings ONLY:
+        - no surviving findings -> skill_verdict SAFE, risk_level SAFE
+        - surviving findings all LOW with no exfiltration/injection/malware ->
+          skill_verdict SAFE, risk_level LOW
+        - skill_verdict SUSPICIOUS or MALICIOUS ONLY if at least one surviving
+          finding is MEDIUM+ with concrete malicious intent per the gate
+        Do NOT raise the verdict for unusual-but-benign behavior.
 
     6. Produce the final JSON report. Every field in the schema is REQUIRED.
        Use the exact category enum values from the threat categories reference.

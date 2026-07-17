@@ -72,7 +72,7 @@ def scan(
     Args:
         skill_directory: Path to the Agent Skill directory.
         output_path: Where to write the JSON report.
-        model: OpenAI model name (default: gpt-4.1 or OPENAI_MODEL_NAME env).
+        model: OpenAI model name (default: gpt-5.4-mini or OPENAI_MODEL_NAME env).
 
     Returns:
         The parsed report dict.
@@ -82,6 +82,9 @@ def scan(
     
     if model:
         os.environ["OPENAI_MODEL_NAME"] = model
+    else:
+        # Default model when neither an explicit arg nor the env var is set.
+        os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-5.4-mini")
 
     skill_directory = os.path.abspath(skill_directory)
     output_path = os.path.abspath(output_path)

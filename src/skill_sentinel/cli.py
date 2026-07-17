@@ -330,7 +330,7 @@ def _scan_single(
     }
 
     # 6. Print pre-scan info
-    model = os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
+    model = os.environ.get("OPENAI_MODEL_NAME", "gpt-5.4-mini")
     print(f"[Skill Sentinel] Model:          {model}")
     print(f"[Skill Sentinel] Scanning:       {inputs['skill_directory']}")
     print(f"[Skill Sentinel] SKILL.md:       {inputs['skill_md_path']}")
@@ -536,7 +536,7 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     # Set model (env var is how CrewAI / litellm pick it up)
     # ------------------------------------------------------------------
-    model = args.model or os.environ.get("OPENAI_MODEL_NAME", "gpt-4.1")
+    model = args.model or os.environ.get("OPENAI_MODEL_NAME", "gpt-5.4-mini")
     os.environ["OPENAI_MODEL_NAME"] = model
 
     # ------------------------------------------------------------------
@@ -748,7 +748,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         default=None,
         help=(
-            "OpenAI model to use (default: gpt-4.1). "
+            "OpenAI model to use (default: gpt-5.4-mini). "
             "Also settable via OPENAI_MODEL_NAME env var."
         ),
     )

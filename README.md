@@ -118,7 +118,7 @@ Options:
   -o, --output PATH     Single scan: output file (default: report.json).
                         Multi-scan: output directory (default: ./skill_sentinel_reports).
   --parallel            Scan multiple skills in parallel (5 concurrent).
-  -m, --model MODEL     OpenAI model to use (default: gpt-4.1).
+  -m, --model MODEL     OpenAI model to use (default: gpt-5.4-mini).
   --api-key KEY         OpenAI API key (prefer OPENAI_API_KEY env var).
   -V, --version         Show version and exit.
 ```
@@ -175,7 +175,7 @@ Reports are saved as `<provider>__<skill_name>.json` in `./skill_sentinel_report
 ```python
 from skill_sentinel.main import scan
 
-report = scan("/path/to/skill", output_path="report.json", model="gpt-4.1")
+report = scan("/path/to/skill", output_path="report.json", model="gpt-5.4-mini")
 print(report["overall_risk_assessment"]["skill_verdict"])
 ```
 
@@ -239,7 +239,7 @@ skill_scanner_package/
 | Variable | Description | Default |
 |---|---|---|
 | `OPENAI_API_KEY` | Your OpenAI API key (required) | — |
-| `OPENAI_MODEL_NAME` | Model to use for analysis | `gpt-4.1` |
+| `OPENAI_MODEL_NAME` | Model to use for analysis | `gpt-5.4-mini` |
 | `VIRUSTOTAL_API_KEY` | VirusTotal API key for binary malware scanning (optional) | — |
 
 ## Threat Categories
