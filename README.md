@@ -241,9 +241,38 @@ skill_scanner_package/
 
 | Variable | Description | Default |
 |---|---|---|
-| `OPENAI_API_KEY` | Your OpenAI API key (required) | — |
-| `OPENAI_MODEL_NAME` | Model to use for analysis | `gpt-5.4-mini` |
+| `OPENAI_API_KEY` | OpenAI API key (required when OpenAI is the primary or a fallback) | — |
+| `OPENAI_MODEL_NAME` | Primary model for analysis (takes precedence over `PRIMARY_MODEL`) | `gpt-5.4-mini` |
+| `PRIMARY_MODEL` | Primary model, used when `OPENAI_MODEL_NAME` is unset (lets you pick a non-OpenAI primary, e.g. `anthropic/claude-<model-id>`) | — |
+| `FALLBACK_MODELS` | Comma-separated `provider/model` list tried in order when the primary fails with a transient/provider error (see below) | — |
+| `ANTHROPIC_API_KEY` | Anthropic key (required if an `anthropic/...` model is used) | — |
 | `VIRUSTOTAL_API_KEY` | VirusTotal API key for binary malware scanning (optional) | — |
+
+### Provider & model fallback
+
+By default the scanner uses a single primary model. Set `FALLBACK_MODELS` to a
+comma-separated list of `provider/model` strings to make each agent try the
+primary first and fall back to the next model when a call fails with a
+**transient or provider-level** error (rate limit, quota exhausted, `5xx`,
+connection, or auth). Non-retryable errors (e.g. a malformed request) are not
+retried. Fallbacks may be a **different provider** than the primary:
+
+```bash
+export OPENAI_API_KEY="sk-..."          # primary (OpenAI, native)
+export ANTHROPIC_API_KEY="sk-ant-..."   # first fallback
+export GROQ_API_KEY="gsk_..."           # second fallback (via LiteLLM)
+export OPENAI_MODEL_NAME="gpt-5.4-mini"
+export FALLBACK_MODELS="anthropic/claude-<model-id>,groq/llama-3.3-70b-versatile"
+```
+
+Each model authenticates with its provider's standard key env var. **OpenAI,
+Anthropic, and Gemini** ship as native providers with this package. Most other
+providers work with no extra setup — either as native OpenAI-compatible
+providers (DeepSeek, OpenRouter, Bedrock, …) or through the bundled LiteLLM
+backend using their usual `provider/model` id (Groq, Together, Mistral, Cohere,
+xAI, …). A native-only provider not bundled here (e.g. Azure) additionally needs
+its CrewAI extra installed (e.g. `pip install "crewai[...]"`); a fallback whose
+provider isn't installed is skipped with a warning and never breaks the primary.
 
 ## Threat Categories
 

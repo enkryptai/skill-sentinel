@@ -105,9 +105,13 @@ def _finalize_report(
         try:
             report_data = json.loads(raw)
         except json.JSONDecodeError:
-            last_brace = raw.rfind("}")
-            if last_brace != -1:
-                report_data = json.loads(raw[: last_brace + 1])
+            # Some models (esp. open-weight fallback models) wrap the JSON in
+            # ```json fences or surround it with prose. Extract the outermost
+            # object: everything from the first "{" to the last "}".
+            start = raw.find("{")
+            end = raw.rfind("}")
+            if start != -1 and end > start:
+                report_data = json.loads(raw[start : end + 1])
             else:
                 raise
 
@@ -157,8 +161,12 @@ def scan(
     if model:
         os.environ["OPENAI_MODEL_NAME"] = model
     else:
-        # Default model when neither an explicit arg nor the env var is set.
-        os.environ.setdefault("OPENAI_MODEL_NAME", "gpt-5.4-mini")
+        # Default primary when neither an explicit arg nor OPENAI_MODEL_NAME is
+        # set. PRIMARY_MODEL lets the container pick the primary; FALLBACK_MODELS
+        # adds provider/model fallbacks (see crew.build_llm()).
+        os.environ.setdefault(
+            "OPENAI_MODEL_NAME", os.environ.get("PRIMARY_MODEL") or "gpt-5.4-mini"
+        )
 
     skill_directory = os.path.abspath(skill_directory)
     output_path = os.path.abspath(output_path)

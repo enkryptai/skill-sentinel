@@ -3,6 +3,37 @@
 All notable changes to skill-sentinel are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.0]
+
+### Added — provider & model fallback
+
+Each agent can now fall back across models and providers when a call fails with a
+transient or provider-level error (rate limit, quota exhausted, `5xx`,
+connection, or auth); non-retryable errors are not retried.
+
+- **`FALLBACK_MODELS`** — comma-separated `provider/model` list tried in order
+  after the primary (e.g. `anthropic/claude-<model-id>,groq/llama-3.3-70b-versatile`).
+  Fallbacks may be a different provider than the primary; each authenticates with
+  its provider's standard key env var. A fallback whose provider isn't installed
+  is skipped with a warning and never breaks the primary.
+- **`PRIMARY_MODEL`** — sets the primary model when `OPENAI_MODEL_NAME` is unset,
+  allowing a non-OpenAI primary.
+
+With no `FALLBACK_MODELS` set, behaviour is unchanged (a single primary model).
+
+### Fixed
+
+- Report parsing now tolerates a JSON report wrapped in ```` ```json ```` fences
+  or surrounded by prose (common with open-weight fallback models) by extracting
+  the outermost `{ … }` object, instead of failing on the leading fence.
+
+### Changed
+
+- The `crewai` dependency now includes the `litellm`, `anthropic`, and
+  `google-genai` extras (`crewai[tools,litellm,anthropic,google-genai]`) so
+  OpenAI, Anthropic, and Gemini work as native providers and the long tail of
+  providers routes through LiteLLM out of the box.
+
 ## [0.3.0]
 
 ### Added — report metadata computed by the scanner

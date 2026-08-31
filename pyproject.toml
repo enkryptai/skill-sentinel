@@ -1,6 +1,6 @@
 [project]
 name = "skill-sentinel"
-version = "0.3.0"
+version = "0.4.0"
 description = "Scan Agent Skill packages for security threats using multi-agent AI analysis"
 authors = [{ name = "Enkrypt AI" }]
 license = { text = "Apache-2.0" }
@@ -18,7 +18,7 @@ classifiers = [
     "Programming Language :: Python :: 3.13",
 ]
 dependencies = [
-    "crewai[tools]>=1.9,<2.0",
+    "crewai[tools,litellm,anthropic,google-genai]>=1.9,<2.0",
     "python-dotenv>=1.0",
     "httpx>=0.27",
 ]
