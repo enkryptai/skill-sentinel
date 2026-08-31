@@ -3,6 +3,16 @@
 All notable changes to skill-sentinel are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.4.1]
+
+### Added
+
+- **`model_used`** in the report — the distinct model(s) that actually served a
+  successful call, in first-seen order. With a `FallbackLLM` this reflects the
+  model the crew landed on (e.g. a fallback that ran because the primary was
+  unavailable), so callers can record what really produced the report rather than
+  only the configured primary.
+
 ## [0.4.0]
 
 ### Added — provider & model fallback

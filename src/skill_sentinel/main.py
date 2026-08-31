@@ -89,6 +89,27 @@ def _compute_content_hash(skill_directory: str) -> str:
     return h.hexdigest()
 
 
+def _effective_models(crew_instance) -> list[str]:
+    """Distinct model(s) that actually served a successful call, in first-seen
+    order. Reads each delegate LLM's own success counter, so with a FallbackLLM
+    it reflects the model(s) the crew landed on (e.g. a fallback that ran because
+    the primary was unavailable), not just the configured primary."""
+    used: list[str] = []
+    for agent in getattr(crew_instance, "agents", []) or []:
+        llm = getattr(agent, "llm", None)
+        if llm is None:
+            continue
+        # FallbackLLM exposes its delegates as ``_llms``; a plain LLM is itself.
+        for delegate in getattr(llm, "_llms", None) or [llm]:
+            try:
+                if delegate.get_token_usage_summary().successful_requests > 0:
+                    if delegate.model not in used:
+                        used.append(delegate.model)
+            except Exception:
+                continue
+    return used
+
+
 def _finalize_report(
     report_path: str,
     crew_instance,
@@ -122,6 +143,9 @@ def _finalize_report(
             skill_md_path, skill_directory
         )
         report_data["content_hash"] = _compute_content_hash(skill_directory)
+        models = _effective_models(crew_instance)
+        if models:
+            report_data["model_used"] = ", ".join(models)
         minutes, seconds = divmod(int(elapsed_seconds), 60)
         report_data["scan_duration"] = {
             "seconds": round(elapsed_seconds, 1),
@@ -152,8 +176,9 @@ def scan(
     Returns:
         The parsed report dict. Alongside the analysis fields it includes
         code-computed metadata: ``token_usage``, ``skill_name`` (from SKILL.md),
-        ``content_hash`` (sha256 over every file in the skill dir), and
-        ``scan_duration``.
+        ``content_hash`` (sha256 over every file in the skill dir),
+        ``scan_duration``, and ``model_used`` (the model(s) that actually served
+        the scan — reflects a fallback when the primary was unavailable).
     """
     # Disable CrewAI telemetry/tracing prompt by default
     os.environ.setdefault("CREWAI_TRACING_ENABLED", "false")
