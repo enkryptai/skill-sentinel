@@ -332,6 +332,12 @@ def _scan_single(
     # 6. Print pre-scan info
     model = os.environ.get("OPENAI_MODEL_NAME", "gpt-5.4-mini")
     print(f"[Skill Sentinel] Model:          {model}")
+    _api_base = os.environ.get("LLM_API_BASE", "")
+    if _api_base:
+        print(f"[Skill Sentinel] Endpoint:       {_api_base}")
+    _ctx = os.environ.get("LLM_CONTEXT_WINDOW", "")
+    if _ctx:
+        print(f"[Skill Sentinel] Context window: {_ctx}")
     print(f"[Skill Sentinel] Scanning:       {inputs['skill_directory']}")
     print(f"[Skill Sentinel] SKILL.md:       {inputs['skill_md_path']}")
     print(
@@ -521,23 +527,48 @@ def cmd_scan(args: argparse.Namespace) -> None:
     # ------------------------------------------------------------------
     # Validate API key early, before heavy imports
     # ------------------------------------------------------------------
+    # A locally served model (vLLM, Ollama) authenticates with nothing, so the
+    # key is only required when the primary model is a hosted provider.
+    from skill_sentinel.providers import is_local_model
+
+    requested_model = (
+        args.model
+        or os.environ.get("OPENAI_MODEL_NAME")
+        or os.environ.get("PRIMARY_MODEL", "")
+    )
     api_key = args.api_key or os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
+    if not api_key and not is_local_model(requested_model):
         print(
             "Error: OpenAI API key not found.\n"
             "Set it via:  export OPENAI_API_KEY='sk-...'\n"
-            "Or pass:     --api-key sk-...",
+            "Or pass:     --api-key sk-...\n"
+            "Local models need no key, e.g. --model hosted_vllm/<served-name>",
             file=sys.stderr,
         )
         sys.exit(1)
 
-    os.environ["OPENAI_API_KEY"] = api_key
+    if api_key:
+        os.environ["OPENAI_API_KEY"] = api_key
 
     # ------------------------------------------------------------------
     # Set model (env var is how CrewAI / litellm pick it up)
     # ------------------------------------------------------------------
-    model = args.model or os.environ.get("OPENAI_MODEL_NAME", "gpt-5.4-mini")
+    # Same precedence as build_llm(): unconditionally defaulting here would
+    # overwrite OPENAI_MODEL_NAME and silently discard PRIMARY_MODEL, which
+    # takes effect only when OPENAI_MODEL_NAME is unset.
+    model = (
+        args.model
+        or os.environ.get("OPENAI_MODEL_NAME")
+        or os.environ.get("PRIMARY_MODEL")
+        or "gpt-5.4-mini"
+    )
     os.environ["OPENAI_MODEL_NAME"] = model
+
+    # Local-server options; the CLI flags win over any inherited env value.
+    if getattr(args, "api_base", None):
+        os.environ["LLM_API_BASE"] = args.api_base
+    if getattr(args, "context_window", None):
+        os.environ["LLM_CONTEXT_WINDOW"] = str(args.context_window)
 
     # ------------------------------------------------------------------
     # Heavy imports after env is configured
@@ -756,7 +787,27 @@ def build_parser() -> argparse.ArgumentParser:
         "--api-key",
         default=None,
         help=(
-            "OpenAI API key. Prefer using the OPENAI_API_KEY env var instead."
+            "OpenAI API key. Prefer using the OPENAI_API_KEY env var instead. "
+            "Not required for locally served models."
+        ),
+    )
+    scan_parser.add_argument(
+        "--api-base",
+        default=None,
+        help=(
+            "Base URL of the model server, e.g. http://localhost:8000/v1. "
+            "Only needed when a local server is not at its provider default. "
+            "Also settable via LLM_API_BASE."
+        ),
+    )
+    scan_parser.add_argument(
+        "--context-window",
+        type=int,
+        default=None,
+        help=(
+            "Context window of the model in tokens. Set this for locally "
+            "served models, which CrewAI otherwise assumes to be 8192. "
+            "Also settable via LLM_CONTEXT_WINDOW."
         ),
     )
 

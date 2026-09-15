@@ -246,6 +246,8 @@ skill_scanner_package/
 | `PRIMARY_MODEL` | Primary model, used when `OPENAI_MODEL_NAME` is unset (lets you pick a non-OpenAI primary, e.g. `anthropic/claude-<model-id>`) | — |
 | `FALLBACK_MODELS` | Comma-separated `provider/model` list tried in order when the primary fails with a transient/provider error (see below) | — |
 | `ANTHROPIC_API_KEY` | Anthropic key (required if an `anthropic/...` model is used) | — |
+| `LLM_API_BASE` | Endpoint of the primary model's server, for local/self-hosted inference (see below) | provider default |
+| `LLM_CONTEXT_WINDOW` | Context window of the primary model, in tokens. Set this for local models | inferred |
 | `VIRUSTOTAL_API_KEY` | VirusTotal API key for binary malware scanning (optional) | — |
 
 ### Provider & model fallback
@@ -273,6 +275,50 @@ backend using their usual `provider/model` id (Groq, Together, Mistral, Cohere,
 xAI, …). A native-only provider not bundled here (e.g. Azure) additionally needs
 its CrewAI extra installed (e.g. `pip install "crewai[...]"`); a fallback whose
 provider isn't installed is skipped with a warning and never breaks the primary.
+
+### Local / self-hosted models
+
+Skill Sentinel can run entirely against a local OpenAI-compatible server
+(vLLM, Ollama) with no API key and no data leaving the machine. Address the
+server with a provider prefix; the name after the prefix is the server's
+served model name:
+
+```bash
+# Start a server (vLLM)
+vllm serve <model> \
+  --served-model-name my-model \
+  --max-model-len 32768 \
+  --enable-auto-tool-choice --tool-call-parser <parser>
+
+# Scan with it
+skill-sentinel scan --skill ./my-skill \
+  --model hosted_vllm/my-model \
+  --context-window 32768
+```
+
+or via the environment:
+
+```bash
+export PRIMARY_MODEL="hosted_vllm/my-model"
+export LLM_CONTEXT_WINDOW=32768
+```
+
+**Set `--context-window` / `LLM_CONTEXT_WINDOW`.** CrewAI infers a model's
+context window by matching a table of hosted model names. A self-hosted name
+matches nothing and falls back to 8192 tokens — smaller than Skill Sentinel's
+own prompt overhead — so the crew will summarise or fail part-way through a
+scan on a model that could comfortably hold it. Use the server's configured
+maximum (vLLM's `--max-model-len`).
+
+`--api-base` / `LLM_API_BASE` is only needed when the server is not at the
+provider default (vLLM `http://localhost:8000/v1`, Ollama
+`http://localhost:11434/v1`) — for example a remote host, or reaching the host
+from inside a container.
+
+The server must support **tool calling**, which the file-inspection agents rely
+on; start vLLM with `--enable-auto-tool-choice` and the tool-call parser for
+your model. A local model can also be combined with cloud fallbacks via
+`FALLBACK_MODELS`.
 
 ## Threat Categories
 

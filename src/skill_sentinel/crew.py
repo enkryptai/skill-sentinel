@@ -3,12 +3,46 @@ from typing import Any, List
 
 from crewai import LLM, Agent, Crew, Process, Task
 from crewai.agents.agent_builder.base_agent import BaseAgent
+from crewai.llm import CONTEXT_WINDOW_USAGE_RATIO
 from crewai.llms.base_llm import BaseLLM
 from crewai.project import CrewBase, agent, crew, task
 from crewai.types.usage_metrics import UsageMetrics
 from pydantic import PrivateAttr
 
+# Defined in providers.py (no heavy imports, so the CLI can consult it before
+# importing CrewAI); re-exported here for backwards compatibility.
+from skill_sentinel.providers import (  # noqa: F401
+    LOCAL_PROVIDER_PREFIXES,
+    is_local_model,
+)
 from skill_sentinel.tools.custom_tool import ReadFileTool, GrepTool
+
+
+# --------------------------------------------------------------------------- #
+# Local / self-hosted models
+# --------------------------------------------------------------------------- #
+
+
+def _context_window_override(llm: LLM, size: int) -> None:
+    """Force ``llm.get_context_window_size()`` to return ``size``.
+
+    CrewAI derives the context window by prefix-matching a hardcoded table of
+    hosted model names. A self-hosted model matches nothing and silently falls
+    back to 8192 * 0.85 = 6963 tokens, which is far below what a typical local
+    server is configured for -- and below Skill Sentinel's own prompt overhead,
+    so the crew would summarise or fail mid-scan on a model that can easily
+    hold the whole scan.
+
+    ``LLM`` accepts a ``context_window_size`` constructor argument, but the
+    native (non-litellm) provider classes do not define that field and drop it
+    without error, so the override has to replace the method instead.
+    """
+    base = type(llm)
+    llm.__class__ = type(
+        f"ContextWindowOverride{base.__name__}",
+        (base,),
+        {"get_context_window_size": lambda self: size},
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -110,6 +144,20 @@ def build_llm() -> BaseLLM:
     authenticates with its provider's standard key env var (``OPENAI_API_KEY``,
     ``ANTHROPIC_API_KEY``, ...).
 
+    Local / self-hosted servers (vLLM, Ollama) are addressed with a provider
+    prefix, e.g. ``PRIMARY_MODEL=hosted_vllm/<served-model-name>``. Two
+    optional variables tune them:
+
+    ``LLM_API_BASE``
+        Endpoint of the primary model's server, e.g.
+        ``http://localhost:8000/v1``. Only needed when the server is not at the
+        provider's default (vLLM: ``http://localhost:8000/v1``, Ollama:
+        ``http://localhost:11434/v1``), such as a container or remote host.
+    ``LLM_CONTEXT_WINDOW``
+        Context window of the primary model in tokens -- see
+        ``_context_window_override``. Set it to the server's configured
+        maximum (vLLM's ``--max-model-len``).
+
     Returns a plain ``LLM`` when no fallbacks are configured (unchanged
     single-model behaviour), otherwise a ``FallbackLLM``. A fallback that fails
     to construct is skipped with a warning so it can never break the primary.
@@ -122,7 +170,34 @@ def build_llm() -> BaseLLM:
     fallbacks = [
         m.strip() for m in os.environ.get("FALLBACK_MODELS", "").split(",") if m.strip()
     ]
-    llms: List[LLM] = [LLM(model=primary)]
+
+    primary_kwargs: dict[str, Any] = {}
+    api_base = os.environ.get("LLM_API_BASE", "").strip()
+    if api_base:
+        # Native providers read ``base_url``; the litellm fallback path reads
+        # ``api_base``. Passing only ``api_base`` leaves a native provider on
+        # its default endpoint, so set both.
+        primary_kwargs["base_url"] = api_base
+        primary_kwargs["api_base"] = api_base
+
+    llms: List[LLM] = [LLM(model=primary, **primary_kwargs)]
+
+    context_window = os.environ.get("LLM_CONTEXT_WINDOW", "").strip()
+    if context_window:
+        try:
+            size = int(context_window)
+            if size <= 0:
+                raise ValueError("must be positive")
+        except ValueError as exc:
+            print(
+                f"[Skill Sentinel] ignoring invalid LLM_CONTEXT_WINDOW "
+                f"'{context_window}': {exc}"
+            )
+        else:
+            # CrewAI reserves part of the window for the completion; applying
+            # the same ratio it uses for known models keeps that headroom.
+            _context_window_override(llms[0], int(size * CONTEXT_WINDOW_USAGE_RATIO))
+
     for m in fallbacks:
         try:
             llms.append(LLM(model=m))

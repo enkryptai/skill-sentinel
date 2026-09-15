@@ -3,6 +3,34 @@
 All notable changes to skill-sentinel are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.0]
+
+### Added — local / self-hosted inference
+
+Scans can run entirely against a local OpenAI-compatible server (vLLM, Ollama)
+with no API key and no data leaving the machine, addressed with a provider
+prefix (e.g. `PRIMARY_MODEL=hosted_vllm/<served-model-name>`).
+
+- **`LLM_CONTEXT_WINDOW`** / **`--context-window`** — context window of the
+  primary model, in tokens. CrewAI infers the window from a table of hosted
+  model names; a self-hosted name matches nothing and falls back to 8192, which
+  is below Skill Sentinel's own prompt overhead and made the crew summarise or
+  fail part-way through a scan. `LLM` accepts a `context_window_size` argument,
+  but the native provider classes do not define that field and drop it without
+  error, so the override replaces the method.
+- **`LLM_API_BASE`** / **`--api-base`** — endpoint of the primary model's
+  server, for when it is not at the provider default (vLLM
+  `http://localhost:8000/v1`, Ollama `http://localhost:11434/v1`). Passed as
+  both `base_url` and `api_base`, since native providers read the former and
+  the LiteLLM path the latter.
+- The CLI no longer requires `OPENAI_API_KEY` when the primary model is a local
+  provider; hosted providers are unchanged.
+
+### Changed
+
+- Minimum `crewai` raised to **1.15**, the first version with the native
+  `hosted_vllm` / `ollama` OpenAI-compatible providers these options rely on.
+
 ## [0.4.1]
 
 ### Added
