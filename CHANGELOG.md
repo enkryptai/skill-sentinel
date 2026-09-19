@@ -3,6 +3,21 @@
 All notable changes to skill-sentinel are documented here. This project adheres
 to [Semantic Versioning](https://semver.org/).
 
+## [0.5.1]
+
+### Changed — `unauthorized_tool_use` is always LOW
+
+A finding in the `unauthorized_tool_use` category (an `allowed-tools` manifest
+that is missing, empty, or exceeded by the code) is now always severity LOW and
+never raises the skill verdict on its own. Previously its default was HIGH, and
+a self-hosted model (gpt-oss-120b) escalated a *missing* `allowed-tools` field
+into a HIGH "concealment" finding often enough to mark plainly benign skills
+SUSPICIOUS — including a false positive on the evaluation corpus's `b05_envconfig`
+and on first-party skills. Any actual harm behind an undeclared capability
+(exfiltration, command execution, destructive actions) is still reported under
+its own category at the severity that harm deserves. Prompt-only change in
+`data/threat_categories.md` and `config/tasks.yaml`; no code or schema changes.
+
 ## [0.5.0]
 
 ### Added — local / self-hosted inference

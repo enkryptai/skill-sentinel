@@ -236,6 +236,8 @@ report_synthesis_task:
        - Hardcoded secrets = HIGH
        - Unverified binary files (scan failed / no VT key / not in VT) = MEDIUM
        - Description mismatch without clear harm = MEDIUM
+       - Unauthorized tool use (allowed-tools missing, empty, or exceeded) = LOW,
+         ALWAYS; report any actual harm under its own category instead
        - Missing optional metadata = LOW
 
     5. CONSOLIDATE related findings into single actionable items using the
